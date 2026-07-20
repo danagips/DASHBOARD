@@ -27,11 +27,11 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter',system-ui,sans-se
 #loginErr{color:var(--neg);font-size:12px;margin-top:10px;display:none}
 /* ---------- LAYOUT ---------- */
 #app{display:none}
-header{position:sticky;top:0;z-index:50;background:rgba(12,14,19,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:center;gap:18px;height:60px}
+header{position:sticky;top:0;z-index:50;background:rgba(12,14,19,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:center;gap:14px;height:60px}
 .logo{font-size:19px;font-weight:800;white-space:nowrap}
 .logo span{color:var(--red)}
 nav{display:flex;gap:4px;flex:1;overflow-x:auto}
-nav button{background:none;border:none;color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
+nav button{background:none;border:none;color:var(--muted);font-family:inherit;font-size:13.5px;font-weight:600;padding:8px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
 nav button:hover{color:var(--txt)}
 nav button.on{background:var(--red);color:#fff}
 .hbtn{background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap}
@@ -45,7 +45,6 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 /* ---------- FILTERS ---------- */
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:flex-end}
 .f label{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-/* multiselect */
 .ms{position:relative;min-width:170px}
 .ms .msBtn{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--txt);border-radius:9px;padding:9px 12px;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;display:flex;justify-content:space-between;gap:8px}
 .ms .msBtn:after{content:"▾";color:var(--muted)}
@@ -120,6 +119,7 @@ th.num{text-align:right}
   <nav>
     <button class="on" data-v="ing" onclick="setView('ing')">📈 Ingresos</button>
     <button data-v="egr" onclick="setView('egr')">📉 Egresos</button>
+    <button data-v="dep" onclick="setView('dep')">🏢 Por Depto</button>
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
   </nav>
@@ -155,7 +155,7 @@ th.num{text-align:right}
 
   <div class="view" id="v-egr">
     <div class="filters">
-      <div class="f"><label>Edificio / Depto</label><div class="ms" id="ms-egr-edi"></div></div>
+      <div class="f"><label>Depto / Edificio</label><div class="ms" id="ms-egr-edi"></div></div>
       <div class="f"><label>Concepto</label><div class="ms" id="ms-egr-cpt"></div></div>
       <div class="f"><label>Año</label><div class="ms" id="ms-egr-ano"></div></div>
       <div class="f"><label>Mes</label><div class="ms" id="ms-egr-mes"></div></div>
@@ -163,11 +163,28 @@ th.num{text-align:right}
     <div class="kpis" id="k-egr"></div>
     <div class="grid2">
       <div class="card"><h3>Egresos por concepto</h3><div class="ch"><canvas id="ch-egr-cpt"></canvas></div></div>
-      <div class="card"><h3>Egresos por edificio / depto</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
+      <div class="card"><h3>Egresos por depto / edificio</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
     </div>
     <div class="tblCard">
       <div class="tblHead"><h3 id="t-egr-n">Detalle de egresos</h3><button class="hbtn" onclick="expCSV('egr')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-egr"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-dep">
+    <div class="filters">
+      <div class="f"><label>Departamento</label><div class="ms" id="ms-dep-dep"></div></div>
+      <div class="f"><label>Año</label><div class="ms" id="ms-dep-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-dep-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-dep"></div>
+    <div class="grid2">
+      <div class="card"><h3>Resultado por departamento</h3><div class="ch"><canvas id="ch-dep-res"></canvas></div></div>
+      <div class="card"><h3>Evolución mensual de la selección</h3><div class="ch"><canvas id="ch-dep-evo"></canvas></div></div>
+    </div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-dep-n">Resumen por departamento</h3><button class="hbtn" onclick="expCSV('dep')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-dep"></div>
     </div>
   </div>
 
@@ -209,7 +226,7 @@ th.num{text-align:right}
   <div class="modal">
     <h2>⚙ Configuración</h2>
     <label>ID del Google Sheet</label><input id="cfgId">
-    <label>gid de la pestaña de datos</label><input id="cfgGid">
+    <label>Nombre de la pestaña de datos</label><input id="cfgTab" placeholder="$$$">
     <label>Nueva contraseña (opcional)</label><input id="cfgPw" placeholder="dejar vacío para no cambiar">
     <div class="row">
       <button onclick="closeCfg()">Cancelar</button>
@@ -220,10 +237,10 @@ th.num{text-align:right}
 
 <script>
 /* ================= CONFIG ================= */
-const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', gid:'0', pass:'rent2888' };
+const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', tab:'$$$', pass:'rent2888' };
 const cfg = {
   get id(){ return localStorage.getItem('r28_id') || DEF.id },
-  get gid(){ return localStorage.getItem('r28_gid') || DEF.gid },
+  get tab(){ return localStorage.getItem('r28_tab') || DEF.tab },
   get pass(){ return localStorage.getItem('r28_pw') || DEF.pass },
 };
 /* ================= LOGIN ================= */
@@ -248,13 +265,10 @@ function pn(v){
   if(!s || s==='#N/A' || s==='#REF!' || s==='#DIV/0!' || s==='FALSE' || s==='TRUE') return 0;
   s = s.replace(/[^0-9.,\-]/g,'');
   if(!s) return 0;
-  // formato 1.234,56 → 1234.56 ; formato 1,234.56 → 1234.56
   if(s.includes(',') && s.includes('.')){
     if(s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g,'').replace(',','.');
     else s = s.replace(/,/g,'');
-  } else if(s.includes(',')){
-    const dec = s.split(',')[1]; s = (dec && dec.length===3 && s.split(',').length===2 && !s.startsWith('0,')) ? s.replace(/,/g,'') : s.replace(',','.');
-  }
+  } else if(s.includes(',')){ s = s.replace(',','.'); }
   const n = parseFloat(s);
   return isFinite(n) ? n : 0;
 }
@@ -282,82 +296,110 @@ function parseCSV(text){
   return rows;
 }
 function parseFecha(s){
-  // dd/mm/yy o dd/mm/yyyy
   const m = String(s).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if(!m) return null;
   let y = +m[3]; if(y<100) y += 2000;
   return { d:+m[1], m:+m[2], y };
 }
+// ordena claves "m/yyyy"
+function spMesAno(a,b){ const [ma,ya]=a.split('/').map(Number), [mb,yb]=b.split('/').map(Number); return ya!==yb ? ya-yb : ma-mb; }
 
 /* ================= DATA ================= */
-let ROWS = [];        // filas crudas parseadas
+let ROWS = [];
 let ING=[], EGR=[], BK=[];
 let CUR = localStorage.getItem('r28_cur') || 'USD';
 let charts = {};
-let msState = {};     // estado de cada multiselect
-let lastFiltered = {ing:[],egr:[],bk:[],con:[]};
+let msState = {};
+let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
 
 async function loadData(){
   const st = document.getElementById('status');
   st.style.display='block'; st.textContent='Cargando datos del Sheet…';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   try{
-    const url = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&gid=${cfg.gid}&t=${Date.now()}`;
+    const url = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(cfg.tab)}&t=${Date.now()}`;
     const res = await fetch(url);
-    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!res.ok) throw new Error('HTTP '+res.status+' — no se pudo leer la pestaña "'+cfg.tab+'"');
     const text = await res.text();
     const raw = parseCSV(text);
-    if(raw.length<2) throw new Error('Sheet vacío');
-    const H = raw[0].map(h=>h.trim());
+    if(raw.length<2) throw new Error('La pestaña "'+cfg.tab+'" está vacía');
+
+    // buscar la fila de encabezados (tiene 'mes/ano' y 'Departamento')
+    let hi = 0;
+    for(let i=0;i<Math.min(5,raw.length);i++){
+      const c = raw[i].map(x=>String(x).trim());
+      if(c.includes('mes/ano') && c.includes('Departamento')){ hi=i; break; }
+    }
+    const H = raw[hi].map(h=>String(h).trim());
     const ix = {}; H.forEach((h,i)=>{ if(!(h in ix)) ix[h]=i; });
     const g = (r,name)=> (ix[name]!=null && r[ix[name]]!=null) ? String(r[ix[name]]).trim() : '';
 
     ROWS = [];
-    for(let i=1;i<raw.length;i++){
+    for(let i=hi+1;i<raw.length;i++){
       const r = raw[i];
       if(!r || r.every(c=>!String(c).trim())) continue;
-      const moneda = g(r,'Moneda').toUpperCase();
-      const isUSD = moneda.includes('U');
-      const ing = pn(g(r,'Ingresos'));
-      const egr = pn(g(r,'Egresos'));
-      const com = pn(g(r,'Comision BK'));
-      const f = parseFecha(g(r,'Fecha'));
-      let mes = pn(g(r,'mes')) || (f?f.m:0);
-      let ano = pn(g(r,'ano')) || (f?f.y:0);
-      const ingConv = pn(g(r,'Ingresos $ a u$'));   // ARS→USD
-      const ingConvA = pn(g(r,'Ingresos u$ a $'));  // USD→ARS
-      const egrConv = pn(g(r,'Egresos $ a u$'));
-      const egrConvA = pn(g(r,'Egresos u$ a $'));
-      const row = {
-        fecha: g(r,'Fecha'), mes, ano,
+
+      // mes/ano — misma lógica que el portal de propietarios
+      let mesano = g(r,'mes/ano');
+      let mes=0, ano=0;
+      if(/^\d{1,2}\/\d{4}$/.test(mesano)){
+        const [m,y]=mesano.split('/'); mes=+m; ano=+y;
+      } else {
+        mes = pn(g(r,'mes')); ano = pn(g(r,'ano'));
+        if(!mes || !ano){ const f=parseFecha(g(r,'Fecha')); if(f){ mes=mes||f.m; ano=ano||f.y; } }
+        mesano = (mes&&ano) ? mes+'/'+ano : '';
+      }
+      if(!mesano) continue;
+
+      const monedaRaw = g(r,'Moneda').toUpperCase();
+      const isUSD = monedaRaw.includes('U');
+
+      // valores — columnas que usa el portal de propietarios que ya funciona:
+      //  USD: 'Ingresos Total $' (todo convertido a u$s) / 'Egresos $ a u$'
+      //  ARS: 'Ingresos u$ a $' (u$s convertidos) o 'TOTAL' (pesos originales) / 'Egresos u$ a $' o 'Egresos'
+      const ingU = pn(g(r,'Ingresos Total $'));
+      const ingA = pn(g(r,'Ingresos u$ a $')) || pn(g(r,'TOTAL'));
+      const egrU = pn(g(r,'Egresos $ a u$'));
+      const egrA = pn(g(r,'Egresos u$ a $')) || pn(g(r,'Egresos'));
+      const com  = pn(g(r,'Comision BK'));
+
+      ROWS.push({
+        fecha: g(r,'Fecha'), mes, ano, mesano,
         dep: g(r,'Departamento'), pla: g(r,'Plataforma'),
+        cptIng: g(r,'Concepto Ingresos'),
         hue: g(r,'Huésped'), noches: pn(g(r,'Noches')),
         fIn: g(r,'Fecha de ingreso'), fOut: g(r,'Fecha de Egreso'),
         moneda: isUSD?'USD':'ARS',
         formaPago: g(r,'Forma de pago'), donde: g(r,'Donde $?'),
         debe: g(r,'Debe (sí/no)').toUpperCase().startsWith('S'),
-        pendiente: pn(g(r,'Pendiente')),
-        propBK: g(r,'Propiedad BK'),
+        propBK: g(r,'Propiedad BK'), propietario: g(r,'Propietario'),
         edificio: g(r,'Edificio'), cptEgr: g(r,'Concepto Egresos'), detalle: g(r,'Detalle'),
-        ing, egr, com,
-        ingUSD: isUSD ? ing : ingConv,
-        ingARS: isUSD ? ingConvA : ing,
-        egrUSD: isUSD ? egr : egrConv,
-        egrARS: isUSD ? egrConvA : egr,
-        comUSD: isUSD ? com : (ing>0 && ingConv>0 ? com*(ingConv/ing) : com),
-        comARS: isUSD ? (ing>0 && ingConvA>0 ? com*(ingConvA/ing) : com) : com,
-      };
-      ROWS.push(row);
+        ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), com,
+      });
     }
-    ING = ROWS.filter(r=>r.ing!==0 && r.dep);
-    EGR = ROWS.filter(r=>r.egr!==0);
+
+    // tasa de cambio por mes (mediana de ingA/ingU) para convertir comisiones BK
+    const rates = {};
+    ROWS.forEach(r=>{ if(r.ingU>1 && r.ingA>1){ (rates[r.mesano]=rates[r.mesano]||[]).push(r.ingA/r.ingU); } });
+    const RATE = {}; let allR=[];
+    for(const k in rates){ const v=rates[k].sort((a,b)=>a-b); RATE[k]=v[Math.floor(v.length/2)]; allR=allR.concat(v); }
+    allR.sort((a,b)=>a-b);
+    const globalRate = allR.length ? allR[Math.floor(allR.length/2)] : 1000;
+    ROWS.forEach(r=>{
+      const rate = RATE[r.mesano] || globalRate;
+      if(r.moneda==='USD'){ r.comU = r.com; r.comA = r.com*rate; }
+      else { r.comA = r.com; r.comU = r.com/rate; }
+    });
+
+    ING = ROWS.filter(r=>(r.ingU!==0||r.ingA!==0) && r.dep);
+    EGR = ROWS.filter(r=>(r.egrU!==0||r.egrA!==0) && r.cptEgr);
     BK  = ROWS.filter(r=>r.com!==0);
-    document.getElementById('upd').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     st.style.display='none';
     buildFilters();
     setView(currentView);
   }catch(e){
-    st.innerHTML = '⚠ No se pudieron cargar los datos.<br><span style="font-size:12px">'+e.message+' — Verificá que el Sheet esté compartido como “cualquiera con el enlace”.</span>';
+    st.innerHTML = '⚠ No se pudieron cargar los datos.<br><span style="font-size:12px">'+e.message+' — Verificá en ⚙ que el nombre de la pestaña sea exacto y que el Sheet esté compartido como "cualquiera con el enlace".</span>';
   }
 }
 
@@ -417,15 +459,19 @@ function buildFilters(){
   const anos = ROWS.map(r=>r.ano).filter(Boolean);
   const meses = ROWS.map(r=>r.mes).filter(Boolean);
   const curY = Math.max(...anos, 0);
+  const depsAll = [...new Set([...ING.map(r=>r.dep), ...EGR.map(r=>r.dep)])];
   makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep');
   makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla');
   makeMS('ms-ing-ano', anos, 'ano', false, [curY]);
   makeMS('ms-ing-mes', meses, 'mes');
-  makeMS('ms-egr-edi', EGR.map(r=>r.edificio), 'edi');
+  makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi');
   makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt');
   makeMS('ms-egr-ano', anos, 'ano', false, [curY]);
   makeMS('ms-egr-mes', meses, 'mes');
-  makeMS('ms-bk-pro', BK.map(r=>r.propBK), 'pro');
+  makeMS('ms-dep-dep', depsAll, 'dep');
+  makeMS('ms-dep-ano', anos, 'ano', false, [curY]);
+  makeMS('ms-dep-mes', meses, 'mes');
+  makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro');
   makeMS('ms-bk-ano', anos, 'ano', false, [curY]);
   makeMS('ms-bk-mes', meses, 'mes');
   makeMS('ms-con-ano', anos, 'ano', false, [curY]);
@@ -447,11 +493,10 @@ function setCur(c){
   document.getElementById('curA').classList.toggle('on', c==='ARS');
   render();
 }
-function val(r, kind){ // kind: 'ing'|'egr'|'com'
-  if(kind==='ing') return CUR==='USD' ? r.ingUSD : r.ingARS;
-  if(kind==='egr') return CUR==='USD' ? r.egrUSD : r.egrARS;
-  return CUR==='USD' ? r.comUSD : r.comARS;
-}
+function vIng(r){ return CUR==='USD' ? r.ingU : r.ingA; }
+function vEgr(r){ return CUR==='USD' ? r.egrU : r.egrA; }
+function vCom(r){ return CUR==='USD' ? r.comU : r.comA; }
+
 function mkChart(id, type, labels, datasets, opts={}){
   if(charts[id]) charts[id].destroy();
   const ctx = document.getElementById(id);
@@ -468,12 +513,12 @@ function mkChart(id, type, labels, datasets, opts={}){
 }
 const PALETTE = ['#CC1414','#d4af37','#2e86de','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e84393','#f1c40f','#54a0ff','#ff6b6b','#10ac84'];
 
+const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fecha',asc:false}, dep:{key:'res',asc:false} };
 function sortTable(view, key){
   const s = sortState[view];
   if(s.key===key) s.asc=!s.asc; else { s.key=key; s.asc=false; }
   render();
 }
-const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fecha',asc:false} };
 function cmp(a,b,key,asc){
   let x=a[key], y=b[key];
   if(key==='fecha'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
@@ -485,6 +530,7 @@ function render(){
   if(!ROWS.length) return;
   if(currentView==='ing') renderIng();
   else if(currentView==='egr') renderEgr();
+  else if(currentView==='dep') renderDep();
   else if(currentView==='bk') renderBk();
   else renderCon();
 }
@@ -493,25 +539,23 @@ function render(){
 function renderIng(){
   const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), ano=msGet('ms-ing-ano'), mes=msGet('ms-ing-mes');
   let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&ano.has(r.ano)&&mes.has(r.mes));
-  const tot = rows.reduce((a,r)=>a+val(r,'ing'),0);
-  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ing,0);
-  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ing,0);
+  const tot = rows.reduce((a,r)=>a+vIng(r),0);
+  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ingU,0);
+  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ingA,0);
   const noches = rows.reduce((a,r)=>a+r.noches,0);
-  const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+val(r,'ing'),0);
+  const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+vIng(r),0);
   document.getElementById('k-ing').innerHTML = `
     <div class="kpi"><div class="t">Ingresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(tot)}</div></div>
     <div class="kpi"><div class="t">Cobrado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
     <div class="kpi"><div class="t">Cobrado en AR$</div><div class="v">$ ${fmt(totARS)}</div></div>
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
     <div class="kpi"><div class="t">Debe / pendiente</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
-  // charts
-  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+val(r,'ing'));
+  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+vIng(r));
   const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
   mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
-  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+val(r,'ing'));
+  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+vIng(r));
   const plaE = Object.entries(byPla).sort((a,b)=>b[1]-a[1]);
   mkChart('ch-ing-pla','doughnut',plaE.map(e=>e[0]),[{data:plaE.map(e=>e[1]),backgroundColor:PALETTE,borderWidth:0}],{cutout:'62%'});
-  // table
   const s=sortState.ing; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.ing = rows;
   document.getElementById('t-ing-n').textContent = `Detalle de ingresos (${rows.length})`;
@@ -520,13 +564,13 @@ function renderIng(){
       <th onclick="sortTable('ing','fecha')">Fecha</th><th onclick="sortTable('ing','dep')">Depto</th>
       <th onclick="sortTable('ing','pla')">Plataforma</th><th onclick="sortTable('ing','hue')">Huésped</th>
       <th class="num" onclick="sortTable('ing','noches')">Noches</th>
-      <th class="num" onclick="sortTable('ing','ing')">Importe</th><th>Moneda</th>
+      <th class="num" onclick="sortTable('ing','ingU')">Importe</th><th>Moneda orig.</th>
       <th onclick="sortTable('ing','formaPago')">Forma de pago</th><th onclick="sortTable('ing','donde')">Dónde $</th><th>Debe</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td>${r.fecha}</td><td><b>${r.dep}</b></td><td>${r.pla}</td><td>${r.hue}</td>
       <td class="num">${r.noches||''}</td>
-      <td class="num"><b>${fmt(val(r,'ing'))}</b></td>
+      <td class="num"><b>${fmt(vIng(r))}</b></td>
       <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
       <td>${r.formaPago}</td><td>${r.donde}</td>
       <td>${r.debe?'<span class="pill debe">DEBE</span>':''}</td></tr>`).join('')}</tbody>
@@ -537,11 +581,11 @@ function renderIng(){
 /* ---------- EGRESOS ---------- */
 function renderEgr(){
   const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), ano=msGet('ms-egr-ano'), mes=msGet('ms-egr-mes');
-  let rows = EGR.filter(r=>edi.has(r.edificio)&&cpt.has(r.cptEgr)&&ano.has(r.ano)&&mes.has(r.mes));
-  const tot = rows.reduce((a,r)=>a+val(r,'egr'),0);
-  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egr,0);
-  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egr,0);
-  const byCpt={}; rows.forEach(r=>byCpt[r.cptEgr||'(sin)']=(byCpt[r.cptEgr||'(sin)']||0)+val(r,'egr'));
+  let rows = EGR.filter(r=>edi.has(r.dep||r.edificio)&&cpt.has(r.cptEgr)&&ano.has(r.ano)&&mes.has(r.mes));
+  const tot = rows.reduce((a,r)=>a+vEgr(r),0);
+  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrU,0);
+  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrA,0);
+  const byCpt={}; rows.forEach(r=>byCpt[r.cptEgr||'(sin)']=(byCpt[r.cptEgr||'(sin)']||0)+vEgr(r));
   const cptE = Object.entries(byCpt).sort((a,b)=>b[1]-a[1]);
   document.getElementById('k-egr').innerHTML = `
     <div class="kpi"><div class="t">Egresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
@@ -550,7 +594,7 @@ function renderEgr(){
     <div class="kpi"><div class="t">Movimientos</div><div class="v">${rows.length}</div></div>
     <div class="kpi"><div class="t">Mayor concepto</div><div class="v" style="font-size:16px">${cptE[0]?cptE[0][0]:'—'}</div><div class="s">${cptE[0]?fmtM(cptE[0][1]):''}</div></div>`;
   mkChart('ch-egr-cpt','bar',cptE.slice(0,12).map(e=>e[0]),[{label:'Egresos',data:cptE.slice(0,12).map(e=>e[1]),backgroundColor:'#d4af37',borderRadius:6}],{indexAxis:'y'});
-  const byEdi={}; rows.forEach(r=>byEdi[r.edificio||'(sin)']=(byEdi[r.edificio||'(sin)']||0)+val(r,'egr'));
+  const byEdi={}; rows.forEach(r=>{const k=r.dep||r.edificio||'(sin)'; byEdi[k]=(byEdi[k]||0)+vEgr(r);});
   const ediE = Object.entries(byEdi).sort((a,b)=>b[1]-a[1]).slice(0,12);
   mkChart('ch-egr-edi','bar',ediE.map(e=>e[0]),[{label:'Egresos',data:ediE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
   const s=sortState.egr; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
@@ -558,25 +602,81 @@ function renderEgr(){
   document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length})`;
   document.getElementById('t-egr').innerHTML = `<table>
     <thead><tr>
-      <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','edificio')">Edificio/Depto</th>
+      <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto/Edificio</th>
       <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
-      <th class="num" onclick="sortTable('egr','egr')">Importe</th><th>Moneda</th>
+      <th class="num" onclick="sortTable('egr','egrU')">Importe</th><th>Moneda orig.</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
-      <td>${r.fecha}</td><td><b>${r.edificio}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
-      <td class="num"><b>${fmt(val(r,'egr'))}</b></td>
+      <td>${r.fecha}</td><td><b>${r.dep||r.edificio}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
+      <td class="num"><b>${fmt(vEgr(r))}</b></td>
       <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
+  </table>`;
+}
+
+/* ---------- POR DEPTO ---------- */
+function renderDep(){
+  const dep=msGet('ms-dep-dep'), ano=msGet('ms-dep-ano'), mes=msGet('ms-dep-mes');
+  const iRows = ING.filter(r=>dep.has(r.dep)&&ano.has(r.ano)&&mes.has(r.mes));
+  const eRows = EGR.filter(r=>dep.has(r.dep||r.edificio)&&ano.has(r.ano)&&mes.has(r.mes));
+  const totI = iRows.reduce((a,r)=>a+vIng(r),0);
+  const totE = eRows.reduce((a,r)=>a+vEgr(r),0);
+  const totR = totI-totE;
+  const noches = iRows.reduce((a,r)=>a+r.noches,0);
+  document.getElementById('k-dep').innerHTML = `
+    <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
+    <div class="kpi"><div class="t">Egresos</div><div class="v red">${fmtM(totE)}</div></div>
+    <div class="kpi"><div class="t">Resultado</div><div class="v ${totR>=0?'pos':'negv'}">${fmtM(totR)}</div></div>
+    <div class="kpi"><div class="t">Margen</div><div class="v gold">${totI?((totR/totI)*100).toFixed(1):'0'}%</div></div>
+    <div class="kpi"><div class="t">Reservas</div><div class="v">${iRows.length}</div><div class="s">${fmt(noches)} noches</div></div>`;
+  // agrupado por depto
+  const agg = {};
+  iRows.forEach(r=>{ const a=agg[r.dep]=agg[r.dep]||{dep:r.dep,ing:0,egr:0,n:0,noches:0}; a.ing+=vIng(r); a.n++; a.noches+=r.noches; });
+  eRows.forEach(r=>{ const k=r.dep||r.edificio; const a=agg[k]=agg[k]||{dep:k,ing:0,egr:0,n:0,noches:0}; a.egr+=vEgr(r); });
+  let list = Object.values(agg).map(a=>({...a, res:a.ing-a.egr, margen:a.ing?((a.ing-a.egr)/a.ing*100):0}));
+  const s=sortState.dep; list.sort((a,b)=>cmp(a,b,s.key,s.asc));
+  lastFiltered.dep = list;
+  // chart resultado por depto
+  const top = [...list].sort((a,b)=>b.res-a.res);
+  mkChart('ch-dep-res','bar',top.map(e=>e.dep),[{label:'Resultado',data:top.map(e=>e.res),backgroundColor:top.map(e=>e.res>=0?'#2ecc71':'#ff5c5c'),borderRadius:5}]);
+  // evolución mensual de la selección
+  const byM={};
+  iRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.i+=vIng(r); });
+  eRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.e+=vEgr(r); });
+  const keys = Object.keys(byM).sort(spMesAno);
+  const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)});
+  mkChart('ch-dep-evo','line',labels,[
+    {label:'Ingresos',data:keys.map(k=>byM[k].i),borderColor:'#2ecc71',backgroundColor:'rgba(46,204,113,.12)',fill:true,tension:.3,pointRadius:2},
+    {label:'Egresos',data:keys.map(k=>byM[k].e),borderColor:'#CC1414',backgroundColor:'rgba(204,20,20,.12)',fill:true,tension:.3,pointRadius:2}]);
+  document.getElementById('t-dep-n').textContent = `Resumen por departamento (${list.length})`;
+  document.getElementById('t-dep').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('dep','dep')">Depto / Edificio</th>
+      <th class="num" onclick="sortTable('dep','n')">Reservas</th>
+      <th class="num" onclick="sortTable('dep','noches')">Noches</th>
+      <th class="num" onclick="sortTable('dep','ing')">Ingresos</th>
+      <th class="num" onclick="sortTable('dep','egr')">Egresos</th>
+      <th class="num" onclick="sortTable('dep','res')">Resultado</th>
+      <th class="num" onclick="sortTable('dep','margen')">Margen</th>
+    </tr></thead>
+    <tbody>${list.map(a=>`<tr>
+      <td><b>${a.dep}</b></td><td class="num">${a.n}</td><td class="num">${fmt(a.noches)}</td>
+      <td class="num" style="color:var(--green)">${fmt(a.ing)}</td>
+      <td class="num" style="color:var(--neg)">${fmt(a.egr)}</td>
+      <td class="num"><b style="color:${a.res>=0?'var(--green)':'var(--neg)'}">${fmt(a.res)}</b></td>
+      <td class="num">${a.ing?a.margen.toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td class="num">${iRows.length}</td><td class="num">${fmt(noches)}</td>
+      <td class="num">${fmt(totI)}</td><td class="num">${fmt(totE)}</td><td class="num">${fmt(totR)}</td>
+      <td class="num">${totI?((totR/totI)*100).toFixed(1)+'%':'—'}</td></tr></tfoot>
   </table>`;
 }
 
 /* ---------- BOOKING ---------- */
 function renderBk(){
   const pro=msGet('ms-bk-pro'), ano=msGet('ms-bk-ano'), mes=msGet('ms-bk-mes');
-  let rows = BK.filter(r=>(pro.has(r.propBK)||!r.propBK)&&ano.has(r.ano)&&mes.has(r.mes));
-  rows = rows.filter(r=>!r.propBK ? pro.size===msState['ms-bk-pro'].vals.length : true);
-  const tot = rows.reduce((a,r)=>a+val(r,'com'),0);
-  const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+val(r,'com'));
+  let rows = BK.filter(r=>pro.has(r.propBK||'(sin propiedad)')&&ano.has(r.ano)&&mes.has(r.mes));
+  const tot = rows.reduce((a,r)=>a+vCom(r),0);
+  const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+vCom(r));
   const proE = Object.entries(byPro).sort((a,b)=>b[1]-a[1]);
   document.getElementById('k-bk').innerHTML = `
     <div class="kpi"><div class="t">Comisión Booking total (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
@@ -584,9 +684,9 @@ function renderBk(){
     <div class="kpi"><div class="t">Propiedades</div><div class="v">${proE.length}</div></div>
     <div class="kpi"><div class="t">Promedio por reserva</div><div class="v gold">${fmtM(rows.length?tot/rows.length:0)}</div></div>`;
   mkChart('ch-bk-pro','bar',proE.map(e=>e[0]),[{label:'Comisión',data:proE.map(e=>e[1]),backgroundColor:'#2e86de',borderRadius:6}]);
-  const byMes={}; rows.forEach(r=>{const k=r.ano+'-'+String(r.mes).padStart(2,'0'); byMes[k]=(byMes[k]||0)+val(r,'com');});
-  const mesE = Object.entries(byMes).sort((a,b)=>a[0].localeCompare(b[0]));
-  mkChart('ch-bk-mes','bar',mesE.map(e=>{const [y,m]=e[0].split('-');return MESES[+m].slice(0,3)+' '+y.slice(2)}),[{label:'Comisión',data:mesE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  const byMes={}; rows.forEach(r=>{byMes[r.mesano]=(byMes[r.mesano]||0)+vCom(r);});
+  const mesE = Object.entries(byMes).sort((a,b)=>spMesAno(a[0],b[0]));
+  mkChart('ch-bk-mes','bar',mesE.map(e=>{const [m,y]=e[0].split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)}),[{label:'Comisión',data:mesE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
   const s=sortState.bk; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.bk = rows;
   document.getElementById('t-bk-n').textContent = `Detalle comisiones Booking (${rows.length})`;
@@ -594,13 +694,13 @@ function renderBk(){
     <thead><tr>
       <th onclick="sortTable('bk','fecha')">Fecha</th><th onclick="sortTable('bk','propBK')">Propiedad BK</th>
       <th onclick="sortTable('bk','dep')">Depto</th><th onclick="sortTable('bk','hue')">Huésped</th>
-      <th class="num" onclick="sortTable('bk','ing')">Ingreso</th>
-      <th class="num" onclick="sortTable('bk','com')">Comisión</th><th>Moneda</th>
+      <th class="num" onclick="sortTable('bk','ingU')">Ingreso</th>
+      <th class="num" onclick="sortTable('bk','com')">Comisión</th><th>Moneda orig.</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td>${r.fecha}</td><td><b>${r.propBK}</b></td><td>${r.dep}</td><td>${r.hue}</td>
-      <td class="num">${fmt(val(r,'ing'))}</td>
-      <td class="num"><b>${fmt(val(r,'com'))}</b></td>
+      <td class="num">${fmt(vIng(r))}</td>
+      <td class="num"><b>${fmt(vCom(r))}</b></td>
       <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
   </table>`;
@@ -612,16 +712,15 @@ function renderCon(){
   const rows = ROWS.filter(r=>ano.has(r.ano));
   const byM = {};
   rows.forEach(r=>{
-    if(!r.mes||!r.ano) return;
-    const k = r.ano+'-'+String(r.mes).padStart(2,'0');
-    byM[k] = byM[k] || {ing:0,egr:0,com:0,n:0};
-    byM[k].ing += val(r,'ing');
-    byM[k].egr += val(r,'egr');
-    byM[k].com += val(r,'com');
-    if(r.ing!==0) byM[k].n++;
+    if(!r.mesano) return;
+    const b = byM[r.mesano] = byM[r.mesano] || {ing:0,egr:0,com:0,n:0};
+    b.ing += vIng(r);
+    b.egr += vEgr(r);
+    b.com += vCom(r);
+    if(r.ingU!==0||r.ingA!==0) b.n++;
   });
-  const keys = Object.keys(byM).sort();
-  const labels = keys.map(k=>{const [y,m]=k.split('-');return MESES[+m]+' '+y});
+  const keys = Object.keys(byM).sort(spMesAno);
+  const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m]+' '+y});
   const ings = keys.map(k=>byM[k].ing), egrs = keys.map(k=>byM[k].egr);
   const res = keys.map((k,i)=>ings[i]-egrs[i]);
   const totI = ings.reduce((a,b)=>a+b,0), totE = egrs.reduce((a,b)=>a+b,0), totR = totI-totE;
@@ -659,15 +758,18 @@ function expCSV(view){
   if(view==='con'){
     head = ['Mes','Reservas','Ingresos','Egresos','Comision BK','Resultado','Margen'];
     lines = lastFiltered.con.map(r=>[r.mes,r.reservas,r.ing,r.egr,r.com,r.res,r.margen]);
+  } else if(view==='dep'){
+    head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
+    lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,r.ing,r.egr,r.res,r.margen.toFixed(1)]);
   } else if(view==='egr'){
-    head = ['Fecha','Edificio','Concepto','Detalle','Importe','Moneda'];
-    lines = lastFiltered.egr.map(r=>[r.fecha,r.edificio,r.cptEgr,r.detalle,val(r,'egr'),r.moneda]);
+    head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe','Moneda'];
+    lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.cptEgr,r.detalle,vEgr(r),r.moneda]);
   } else if(view==='bk'){
     head = ['Fecha','Propiedad BK','Depto','Huesped','Ingreso','Comision','Moneda'];
-    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,val(r,'ing'),val(r,'com'),r.moneda]);
+    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,vIng(r),vCom(r),r.moneda]);
   } else {
     head = ['Fecha','Depto','Plataforma','Huesped','Noches','Importe','Moneda','Forma de pago','Donde','Debe'];
-    lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.noches,val(r,'ing'),r.moneda,r.formaPago,r.donde,r.debe?'SI':'NO']);
+    lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.noches,vIng(r),r.moneda,r.formaPago,r.donde,r.debe?'SI':'NO']);
   }
   const csv = [head,...lines].map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -679,14 +781,14 @@ function expCSV(view){
 /* ---------- CONFIG ---------- */
 function openCfg(){
   document.getElementById('cfgId').value = cfg.id;
-  document.getElementById('cfgGid').value = cfg.gid;
+  document.getElementById('cfgTab').value = cfg.tab;
   document.getElementById('cfgPw').value = '';
   document.getElementById('cfgBg').classList.add('on');
 }
 function closeCfg(){ document.getElementById('cfgBg').classList.remove('on'); }
 function saveCfg(){
   localStorage.setItem('r28_id', document.getElementById('cfgId').value.trim());
-  localStorage.setItem('r28_gid', document.getElementById('cfgGid').value.trim());
+  localStorage.setItem('r28_tab', document.getElementById('cfgTab').value.trim() || '$$$');
   const pw = document.getElementById('cfgPw').value.trim();
   if(pw) localStorage.setItem('r28_pw', pw);
   closeCfg(); loadData();
