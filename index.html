@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rent2888 · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --red:#CC1414; --red-dark:#8f0e0e; --gold:#d4af37;
+  --bg:#0c0e13; --panel:#151924; --panel2:#1c2130; --border:#262d3f;
+  --txt:#e8eaf0; --muted:#8a93a8; --green:#2ecc71; --neg:#ff5c5c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:'Inter',system-ui,sans-serif;font-size:14px}
+/* ---------- LOGIN ---------- */
+#login{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center}
+#login .box{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:40px;width:340px;text-align:center}
+#login h1{font-size:26px;font-weight:800;margin-bottom:4px}
+#login h1 span{color:var(--red)}
+#login p{color:var(--muted);margin-bottom:22px;font-size:13px}
+#login input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--txt);font-size:15px;text-align:center;letter-spacing:2px}
+#login button{width:100%;margin-top:14px;padding:12px;border:none;border-radius:10px;background:var(--red);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+#login button:hover{background:var(--red-dark)}
+#loginErr{color:var(--neg);font-size:12px;margin-top:10px;display:none}
+/* ---------- LAYOUT ---------- */
+#app{display:none}
+header{position:sticky;top:0;z-index:50;background:rgba(12,14,19,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:center;gap:18px;height:60px}
+.logo{font-size:19px;font-weight:800;white-space:nowrap}
+.logo span{color:var(--red)}
+nav{display:flex;gap:4px;flex:1;overflow-x:auto}
+nav button{background:none;border:none;color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
+nav button:hover{color:var(--txt)}
+nav button.on{background:var(--red);color:#fff}
+.hbtn{background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap}
+.hbtn:hover{border-color:var(--red)}
+#curTgl{display:flex;background:var(--panel2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+#curTgl button{background:none;border:none;color:var(--muted);padding:8px 12px;cursor:pointer;font-weight:700;font-family:inherit;font-size:13px}
+#curTgl button.on{background:var(--gold);color:#111}
+main{padding:22px;max-width:1500px;margin:0 auto}
+.view{display:none}
+.view.on{display:block}
+/* ---------- FILTERS ---------- */
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:flex-end}
+.f label{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+/* multiselect */
+.ms{position:relative;min-width:170px}
+.ms .msBtn{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--txt);border-radius:9px;padding:9px 12px;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;display:flex;justify-content:space-between;gap:8px}
+.ms .msBtn:after{content:"▾";color:var(--muted)}
+.ms .msPanel{display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:60;background:var(--panel2);border:1px solid var(--border);border-radius:10px;min-width:230px;max-height:320px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.ms.open .msPanel{display:block}
+.msPanel input{width:calc(100% - 16px);margin:8px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--txt);font-family:inherit;font-size:13px}
+.msActions{display:flex;gap:6px;padding:0 8px 6px}
+.msActions button{flex:1;background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px;cursor:pointer;font-size:11px;font-family:inherit}
+.msList{max-height:210px;overflow-y:auto;padding:0 4px 6px}
+.msList label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--txt);text-transform:none;letter-spacing:0;margin:0;font-weight:500}
+.msList label:hover{background:var(--panel)}
+.msList input{accent-color:var(--red);margin:0;width:auto}
+/* ---------- KPI ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:14px;padding:16px 18px}
+.kpi .t{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.kpi .v{font-size:24px;font-weight:800;margin-top:6px}
+.kpi .v.pos{color:var(--green)} .kpi .v.negv{color:var(--neg)} .kpi .v.gold{color:var(--gold)} .kpi .v.red{color:var(--red)}
+.kpi .s{font-size:11px;color:var(--muted);margin-top:3px}
+/* ---------- CHARTS / TABLES ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+.card h3{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--txt)}
+.card .ch{position:relative;height:260px}
+.tblCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.tblHead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)}
+.tblHead h3{font-size:13px;font-weight:700}
+.tblWrap{overflow-x:auto;max-height:520px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{position:sticky;top:0;background:var(--panel2);color:var(--muted);text-align:left;padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:var(--txt)}
+td{padding:8px 12px;border-top:1px solid var(--border);white-space:nowrap}
+tr:hover td{background:rgba(204,20,20,.05)}
+tfoot td{background:var(--panel2);font-weight:800;border-top:2px solid var(--red)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+th.num{text-align:right}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.pill.usd{background:rgba(212,175,55,.15);color:var(--gold)}
+.pill.ars{background:rgba(46,204,113,.13);color:var(--green)}
+.pill.debe{background:rgba(255,92,92,.15);color:var(--neg)}
+/* ---------- MODAL / MISC ---------- */
+#status{text-align:center;color:var(--muted);padding:60px 0;font-size:14px}
+.modalBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:90;align-items:center;justify-content:center}
+.modalBg.on{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;width:400px;max-width:92vw}
+.modal h2{font-size:16px;margin-bottom:16px}
+.modal label{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin:12px 0 4px}
+.modal input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--txt);font-family:inherit;font-size:13px}
+.modal .row{display:flex;gap:10px;margin-top:20px}
+.modal .row button{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);font-weight:700;cursor:pointer;font-family:inherit}
+.modal .row button.pri{background:var(--red);border-color:var(--red);color:#fff}
+#upd{font-size:11px;color:var(--muted);white-space:nowrap}
+::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>RENT<span>2888</span></h1>
+    <p>Panel financiero — acceso restringido</p>
+    <input type="password" id="pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Entrar</button>
+    <div id="loginErr">Contraseña incorrecta</div>
+  </div>
+</div>
+
+<div id="app">
+<header>
+  <div class="logo">RENT<span>2888</span></div>
+  <nav>
+    <button class="on" data-v="ing" onclick="setView('ing')">📈 Ingresos</button>
+    <button data-v="egr" onclick="setView('egr')">📉 Egresos</button>
+    <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
+    <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
+  </nav>
+  <span id="upd"></span>
+  <div id="curTgl">
+    <button id="curU" class="on" onclick="setCur('USD')">u$s</button>
+    <button id="curA" onclick="setCur('ARS')">AR$</button>
+  </div>
+  <button class="hbtn" onclick="loadData()">↻ Actualizar</button>
+  <button class="hbtn" onclick="openCfg()">⚙</button>
+</header>
+
+<main>
+  <div id="status">Cargando datos del Sheet…</div>
+
+  <div class="view" id="v-ing">
+    <div class="filters">
+      <div class="f"><label>Departamento</label><div class="ms" id="ms-ing-dep"></div></div>
+      <div class="f"><label>Plataforma</label><div class="ms" id="ms-ing-pla"></div></div>
+      <div class="f"><label>Año</label><div class="ms" id="ms-ing-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-ing-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-ing"></div>
+    <div class="grid2">
+      <div class="card"><h3>Ingresos por departamento (Top 12)</h3><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
+      <div class="card"><h3>Ingresos por plataforma</h3><div class="ch"><canvas id="ch-ing-pla"></canvas></div></div>
+    </div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-ing-n">Detalle de ingresos</h3><button class="hbtn" onclick="expCSV('ing')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-ing"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-egr">
+    <div class="filters">
+      <div class="f"><label>Edificio / Depto</label><div class="ms" id="ms-egr-edi"></div></div>
+      <div class="f"><label>Concepto</label><div class="ms" id="ms-egr-cpt"></div></div>
+      <div class="f"><label>Año</label><div class="ms" id="ms-egr-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-egr-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-egr"></div>
+    <div class="grid2">
+      <div class="card"><h3>Egresos por concepto</h3><div class="ch"><canvas id="ch-egr-cpt"></canvas></div></div>
+      <div class="card"><h3>Egresos por edificio / depto</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
+    </div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-egr-n">Detalle de egresos</h3><button class="hbtn" onclick="expCSV('egr')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-egr"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-bk">
+    <div class="filters">
+      <div class="f"><label>Propiedad BK</label><div class="ms" id="ms-bk-pro"></div></div>
+      <div class="f"><label>Año</label><div class="ms" id="ms-bk-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-bk-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-bk"></div>
+    <div class="grid2">
+      <div class="card"><h3>Comisión por propiedad</h3><div class="ch"><canvas id="ch-bk-pro"></canvas></div></div>
+      <div class="card"><h3>Comisión por mes</h3><div class="ch"><canvas id="ch-bk-mes"></canvas></div></div>
+    </div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-bk-n">Detalle comisiones Booking</h3><button class="hbtn" onclick="expCSV('bk')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-bk"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-con">
+    <div class="filters">
+      <div class="f"><label>Año</label><div class="ms" id="ms-con-ano"></div></div>
+    </div>
+    <div class="kpis" id="k-con"></div>
+    <div class="grid2">
+      <div class="card"><h3>Evolución mensual · Ingresos vs Egresos</h3><div class="ch"><canvas id="ch-con-evo"></canvas></div></div>
+      <div class="card"><h3>Resultado mensual</h3><div class="ch"><canvas id="ch-con-res"></canvas></div></div>
+    </div>
+    <div class="tblCard">
+      <div class="tblHead"><h3>Conciliación mensual</h3><button class="hbtn" onclick="expCSV('con')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-con"></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<div class="modalBg" id="cfgBg">
+  <div class="modal">
+    <h2>⚙ Configuración</h2>
+    <label>ID del Google Sheet</label><input id="cfgId">
+    <label>gid de la pestaña de datos</label><input id="cfgGid">
+    <label>Nueva contraseña (opcional)</label><input id="cfgPw" placeholder="dejar vacío para no cambiar">
+    <div class="row">
+      <button onclick="closeCfg()">Cancelar</button>
+      <button class="pri" onclick="saveCfg()">Guardar y recargar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', gid:'0', pass:'rent2888' };
+const cfg = {
+  get id(){ return localStorage.getItem('r28_id') || DEF.id },
+  get gid(){ return localStorage.getItem('r28_gid') || DEF.gid },
+  get pass(){ return localStorage.getItem('r28_pw') || DEF.pass },
+};
+/* ================= LOGIN ================= */
+function doLogin(){
+  if(document.getElementById('pw').value === cfg.pass){
+    sessionStorage.setItem('r28_auth','1'); showApp();
+  } else { document.getElementById('loginErr').style.display='block'; }
+}
+function showApp(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  loadData();
+}
+if(sessionStorage.getItem('r28_auth')==='1'){ window.addEventListener('DOMContentLoaded',showApp); }
+else { window.addEventListener('DOMContentLoaded',()=>document.getElementById('pw').focus()); }
+
+/* ================= HELPERS ================= */
+const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function pn(v){
+  if(v==null) return 0;
+  let s = String(v).trim();
+  if(!s || s==='#N/A' || s==='#REF!' || s==='#DIV/0!' || s==='FALSE' || s==='TRUE') return 0;
+  s = s.replace(/[^0-9.,\-]/g,'');
+  if(!s) return 0;
+  // formato 1.234,56 → 1234.56 ; formato 1,234.56 → 1234.56
+  if(s.includes(',') && s.includes('.')){
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g,'').replace(',','.');
+    else s = s.replace(/,/g,'');
+  } else if(s.includes(',')){
+    const dec = s.split(',')[1]; s = (dec && dec.length===3 && s.split(',').length===2 && !s.startsWith('0,')) ? s.replace(/,/g,'') : s.replace(',','.');
+  }
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+function fmt(n){
+  const neg = n<0; n = Math.abs(n);
+  const s = n.toLocaleString('es-AR',{minimumFractionDigits:0, maximumFractionDigits:0});
+  return (neg?'-':'') + s;
+}
+function fmtM(n){ return (CUR==='USD' ? 'u$s ' : '$ ') + fmt(n); }
+function parseCSV(text){
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; }
+      else cell+=c;
+    } else {
+      if(c==='"') q=true;
+      else if(c===','){ row.push(cell); cell=''; }
+      else if(c==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; }
+      else if(c!=='\r') cell+=c;
+    }
+  }
+  if(cell!=='' || row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+function parseFecha(s){
+  // dd/mm/yy o dd/mm/yyyy
+  const m = String(s).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(!m) return null;
+  let y = +m[3]; if(y<100) y += 2000;
+  return { d:+m[1], m:+m[2], y };
+}
+
+/* ================= DATA ================= */
+let ROWS = [];        // filas crudas parseadas
+let ING=[], EGR=[], BK=[];
+let CUR = localStorage.getItem('r28_cur') || 'USD';
+let charts = {};
+let msState = {};     // estado de cada multiselect
+let lastFiltered = {ing:[],egr:[],bk:[],con:[]};
+
+async function loadData(){
+  const st = document.getElementById('status');
+  st.style.display='block'; st.textContent='Cargando datos del Sheet…';
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&gid=${cfg.gid}&t=${Date.now()}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const text = await res.text();
+    const raw = parseCSV(text);
+    if(raw.length<2) throw new Error('Sheet vacío');
+    const H = raw[0].map(h=>h.trim());
+    const ix = {}; H.forEach((h,i)=>{ if(!(h in ix)) ix[h]=i; });
+    const g = (r,name)=> (ix[name]!=null && r[ix[name]]!=null) ? String(r[ix[name]]).trim() : '';
+
+    ROWS = [];
+    for(let i=1;i<raw.length;i++){
+      const r = raw[i];
+      if(!r || r.every(c=>!String(c).trim())) continue;
+      const moneda = g(r,'Moneda').toUpperCase();
+      const isUSD = moneda.includes('U');
+      const ing = pn(g(r,'Ingresos'));
+      const egr = pn(g(r,'Egresos'));
+      const com = pn(g(r,'Comision BK'));
+      const f = parseFecha(g(r,'Fecha'));
+      let mes = pn(g(r,'mes')) || (f?f.m:0);
+      let ano = pn(g(r,'ano')) || (f?f.y:0);
+      const ingConv = pn(g(r,'Ingresos $ a u$'));   // ARS→USD
+      const ingConvA = pn(g(r,'Ingresos u$ a $'));  // USD→ARS
+      const egrConv = pn(g(r,'Egresos $ a u$'));
+      const egrConvA = pn(g(r,'Egresos u$ a $'));
+      const row = {
+        fecha: g(r,'Fecha'), mes, ano,
+        dep: g(r,'Departamento'), pla: g(r,'Plataforma'),
+        hue: g(r,'Huésped'), noches: pn(g(r,'Noches')),
+        fIn: g(r,'Fecha de ingreso'), fOut: g(r,'Fecha de Egreso'),
+        moneda: isUSD?'USD':'ARS',
+        formaPago: g(r,'Forma de pago'), donde: g(r,'Donde $?'),
+        debe: g(r,'Debe (sí/no)').toUpperCase().startsWith('S'),
+        pendiente: pn(g(r,'Pendiente')),
+        propBK: g(r,'Propiedad BK'),
+        edificio: g(r,'Edificio'), cptEgr: g(r,'Concepto Egresos'), detalle: g(r,'Detalle'),
+        ing, egr, com,
+        ingUSD: isUSD ? ing : ingConv,
+        ingARS: isUSD ? ingConvA : ing,
+        egrUSD: isUSD ? egr : egrConv,
+        egrARS: isUSD ? egrConvA : egr,
+        comUSD: isUSD ? com : (ing>0 && ingConv>0 ? com*(ingConv/ing) : com),
+        comARS: isUSD ? (ing>0 && ingConvA>0 ? com*(ingConvA/ing) : com) : com,
+      };
+      ROWS.push(row);
+    }
+    ING = ROWS.filter(r=>r.ing!==0 && r.dep);
+    EGR = ROWS.filter(r=>r.egr!==0);
+    BK  = ROWS.filter(r=>r.com!==0);
+    document.getElementById('upd').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    st.style.display='none';
+    buildFilters();
+    setView(currentView);
+  }catch(e){
+    st.innerHTML = '⚠ No se pudieron cargar los datos.<br><span style="font-size:12px">'+e.message+' — Verificá que el Sheet esté compartido como “cualquiera con el enlace”.</span>';
+  }
+}
+
+/* ================= MULTISELECT ================= */
+function makeMS(id, values, label, defaultAll=true, selected=null){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const vals = [...new Set(values.filter(v=>v!==''&&v!=null))].sort((a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true}));
+  const sel = new Set(selected ? selected.filter(v=>vals.includes(v)) : (defaultAll?vals:[]));
+  msState[id] = { vals, sel, label };
+  el.innerHTML = `<button class="msBtn" onclick="msToggle('${id}')"><span id="${id}-lbl"></span></button>
+    <div class="msPanel">
+      <input placeholder="Buscar…" oninput="msFilter('${id}',this.value)">
+      <div class="msActions">
+        <button onclick="msAll('${id}',true)">Todos</button>
+        <button onclick="msAll('${id}',false)">Ninguno</button>
+      </div>
+      <div class="msList" id="${id}-list"></div>
+    </div>`;
+  msRender(id);
+}
+function msRender(id, filter=''){
+  const s = msState[id];
+  const list = document.getElementById(id+'-list');
+  const f = filter.toLowerCase();
+  list.innerHTML = s.vals.filter(v=>String(v).toLowerCase().includes(f)).map(v=>{
+    const disp = s.label==='mes' ? MESES[v]||v : v;
+    return `<label><input type="checkbox" ${s.sel.has(v)?'checked':''} onchange="msChk('${id}','${String(v).replace(/'/g,"\\'")}')"> ${disp}</label>`;
+  }).join('');
+  const lbl = document.getElementById(id+'-lbl');
+  if(s.sel.size===s.vals.length) lbl.textContent = `Todos (${s.vals.length})`;
+  else if(s.sel.size===0) lbl.textContent = 'Ninguno';
+  else if(s.sel.size===1){ const v=[...s.sel][0]; lbl.textContent = s.label==='mes'?(MESES[v]||v):v; }
+  else lbl.textContent = `${s.sel.size} seleccionados`;
+}
+function msChk(id,vRaw){
+  const s = msState[id];
+  const v = s.vals.find(x=>String(x)===String(vRaw));
+  if(s.sel.has(v)) s.sel.delete(v); else s.sel.add(v);
+  msRender(id, document.querySelector(`#${id} .msPanel input`).value);
+  render();
+}
+function msAll(id,on){
+  const s = msState[id];
+  s.sel = on ? new Set(s.vals) : new Set();
+  msRender(id); render();
+}
+function msToggle(id){
+  document.querySelectorAll('.ms.open').forEach(m=>{ if(m.id!==id) m.classList.remove('open'); });
+  document.getElementById(id).classList.toggle('open');
+}
+function msFilter(id,v){ msRender(id,v); }
+function msGet(id){ return msState[id] ? msState[id].sel : new Set(); }
+document.addEventListener('click',e=>{ if(!e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
+
+function buildFilters(){
+  const anos = ROWS.map(r=>r.ano).filter(Boolean);
+  const meses = ROWS.map(r=>r.mes).filter(Boolean);
+  const curY = Math.max(...anos, 0);
+  makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep');
+  makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla');
+  makeMS('ms-ing-ano', anos, 'ano', false, [curY]);
+  makeMS('ms-ing-mes', meses, 'mes');
+  makeMS('ms-egr-edi', EGR.map(r=>r.edificio), 'edi');
+  makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt');
+  makeMS('ms-egr-ano', anos, 'ano', false, [curY]);
+  makeMS('ms-egr-mes', meses, 'mes');
+  makeMS('ms-bk-pro', BK.map(r=>r.propBK), 'pro');
+  makeMS('ms-bk-ano', anos, 'ano', false, [curY]);
+  makeMS('ms-bk-mes', meses, 'mes');
+  makeMS('ms-con-ano', anos, 'ano', false, [curY]);
+}
+
+/* ================= VIEWS ================= */
+let currentView = 'ing';
+function setView(v){
+  currentView = v;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+  const el = document.getElementById('v-'+v);
+  if(el) el.classList.add('on');
+  render();
+}
+function setCur(c){
+  CUR = c; localStorage.setItem('r28_cur',c);
+  document.getElementById('curU').classList.toggle('on', c==='USD');
+  document.getElementById('curA').classList.toggle('on', c==='ARS');
+  render();
+}
+function val(r, kind){ // kind: 'ing'|'egr'|'com'
+  if(kind==='ing') return CUR==='USD' ? r.ingUSD : r.ingARS;
+  if(kind==='egr') return CUR==='USD' ? r.egrUSD : r.egrARS;
+  return CUR==='USD' ? r.comUSD : r.comARS;
+}
+function mkChart(id, type, labels, datasets, opts={}){
+  if(charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  Chart.defaults.color = '#8a93a8';
+  Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
+  Chart.defaults.font.family = 'Inter';
+  charts[id] = new Chart(ctx,{type,data:{labels,datasets},options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:datasets.length>1||type==='doughnut',labels:{boxWidth:12,font:{size:11}}},
+      tooltip:{callbacks:{label:c=>` ${c.dataset.label||c.label}: ${fmtM(c.parsed.y??c.parsed.x??c.parsed)}`}}},
+    ...opts
+  }});
+}
+const PALETTE = ['#CC1414','#d4af37','#2e86de','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e84393','#f1c40f','#54a0ff','#ff6b6b','#10ac84'];
+
+function sortTable(view, key){
+  const s = sortState[view];
+  if(s.key===key) s.asc=!s.asc; else { s.key=key; s.asc=false; }
+  render();
+}
+const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fecha',asc:false} };
+function cmp(a,b,key,asc){
+  let x=a[key], y=b[key];
+  if(key==='fecha'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
+  if(typeof x==='string'){ x=x.toLowerCase(); y=String(y).toLowerCase(); }
+  return (x<y?-1:x>y?1:0)*(asc?1:-1);
+}
+
+function render(){
+  if(!ROWS.length) return;
+  if(currentView==='ing') renderIng();
+  else if(currentView==='egr') renderEgr();
+  else if(currentView==='bk') renderBk();
+  else renderCon();
+}
+
+/* ---------- INGRESOS ---------- */
+function renderIng(){
+  const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), ano=msGet('ms-ing-ano'), mes=msGet('ms-ing-mes');
+  let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&ano.has(r.ano)&&mes.has(r.mes));
+  const tot = rows.reduce((a,r)=>a+val(r,'ing'),0);
+  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ing,0);
+  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ing,0);
+  const noches = rows.reduce((a,r)=>a+r.noches,0);
+  const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+val(r,'ing'),0);
+  document.getElementById('k-ing').innerHTML = `
+    <div class="kpi"><div class="t">Ingresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(tot)}</div></div>
+    <div class="kpi"><div class="t">Cobrado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
+    <div class="kpi"><div class="t">Cobrado en AR$</div><div class="v">$ ${fmt(totARS)}</div></div>
+    <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
+    <div class="kpi"><div class="t">Debe / pendiente</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
+  // charts
+  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+val(r,'ing'));
+  const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+val(r,'ing'));
+  const plaE = Object.entries(byPla).sort((a,b)=>b[1]-a[1]);
+  mkChart('ch-ing-pla','doughnut',plaE.map(e=>e[0]),[{data:plaE.map(e=>e[1]),backgroundColor:PALETTE,borderWidth:0}],{cutout:'62%'});
+  // table
+  const s=sortState.ing; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+  lastFiltered.ing = rows;
+  document.getElementById('t-ing-n').textContent = `Detalle de ingresos (${rows.length})`;
+  document.getElementById('t-ing').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('ing','fecha')">Fecha</th><th onclick="sortTable('ing','dep')">Depto</th>
+      <th onclick="sortTable('ing','pla')">Plataforma</th><th onclick="sortTable('ing','hue')">Huésped</th>
+      <th class="num" onclick="sortTable('ing','noches')">Noches</th>
+      <th class="num" onclick="sortTable('ing','ing')">Importe</th><th>Moneda</th>
+      <th onclick="sortTable('ing','formaPago')">Forma de pago</th><th onclick="sortTable('ing','donde')">Dónde $</th><th>Debe</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td><b>${r.dep}</b></td><td>${r.pla}</td><td>${r.hue}</td>
+      <td class="num">${r.noches||''}</td>
+      <td class="num"><b>${fmt(val(r,'ing'))}</b></td>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
+      <td>${r.formaPago}</td><td>${r.donde}</td>
+      <td>${r.debe?'<span class="pill debe">DEBE</span>':''}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td colspan="4"></td></tr></tfoot>
+  </table>`;
+}
+
+/* ---------- EGRESOS ---------- */
+function renderEgr(){
+  const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), ano=msGet('ms-egr-ano'), mes=msGet('ms-egr-mes');
+  let rows = EGR.filter(r=>edi.has(r.edificio)&&cpt.has(r.cptEgr)&&ano.has(r.ano)&&mes.has(r.mes));
+  const tot = rows.reduce((a,r)=>a+val(r,'egr'),0);
+  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egr,0);
+  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egr,0);
+  const byCpt={}; rows.forEach(r=>byCpt[r.cptEgr||'(sin)']=(byCpt[r.cptEgr||'(sin)']||0)+val(r,'egr'));
+  const cptE = Object.entries(byCpt).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('k-egr').innerHTML = `
+    <div class="kpi"><div class="t">Egresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
+    <div class="kpi"><div class="t">Pagado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
+    <div class="kpi"><div class="t">Pagado en AR$</div><div class="v">$ ${fmt(totARS)}</div></div>
+    <div class="kpi"><div class="t">Movimientos</div><div class="v">${rows.length}</div></div>
+    <div class="kpi"><div class="t">Mayor concepto</div><div class="v" style="font-size:16px">${cptE[0]?cptE[0][0]:'—'}</div><div class="s">${cptE[0]?fmtM(cptE[0][1]):''}</div></div>`;
+  mkChart('ch-egr-cpt','bar',cptE.slice(0,12).map(e=>e[0]),[{label:'Egresos',data:cptE.slice(0,12).map(e=>e[1]),backgroundColor:'#d4af37',borderRadius:6}],{indexAxis:'y'});
+  const byEdi={}; rows.forEach(r=>byEdi[r.edificio||'(sin)']=(byEdi[r.edificio||'(sin)']||0)+val(r,'egr'));
+  const ediE = Object.entries(byEdi).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  mkChart('ch-egr-edi','bar',ediE.map(e=>e[0]),[{label:'Egresos',data:ediE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  const s=sortState.egr; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+  lastFiltered.egr = rows;
+  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length})`;
+  document.getElementById('t-egr').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','edificio')">Edificio/Depto</th>
+      <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
+      <th class="num" onclick="sortTable('egr','egr')">Importe</th><th>Moneda</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td><b>${r.edificio}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
+      <td class="num"><b>${fmt(val(r,'egr'))}</b></td>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
+  </table>`;
+}
+
+/* ---------- BOOKING ---------- */
+function renderBk(){
+  const pro=msGet('ms-bk-pro'), ano=msGet('ms-bk-ano'), mes=msGet('ms-bk-mes');
+  let rows = BK.filter(r=>(pro.has(r.propBK)||!r.propBK)&&ano.has(r.ano)&&mes.has(r.mes));
+  rows = rows.filter(r=>!r.propBK ? pro.size===msState['ms-bk-pro'].vals.length : true);
+  const tot = rows.reduce((a,r)=>a+val(r,'com'),0);
+  const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+val(r,'com'));
+  const proE = Object.entries(byPro).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('k-bk').innerHTML = `
+    <div class="kpi"><div class="t">Comisión Booking total (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
+    <div class="kpi"><div class="t">Reservas con comisión</div><div class="v">${rows.length}</div></div>
+    <div class="kpi"><div class="t">Propiedades</div><div class="v">${proE.length}</div></div>
+    <div class="kpi"><div class="t">Promedio por reserva</div><div class="v gold">${fmtM(rows.length?tot/rows.length:0)}</div></div>`;
+  mkChart('ch-bk-pro','bar',proE.map(e=>e[0]),[{label:'Comisión',data:proE.map(e=>e[1]),backgroundColor:'#2e86de',borderRadius:6}]);
+  const byMes={}; rows.forEach(r=>{const k=r.ano+'-'+String(r.mes).padStart(2,'0'); byMes[k]=(byMes[k]||0)+val(r,'com');});
+  const mesE = Object.entries(byMes).sort((a,b)=>a[0].localeCompare(b[0]));
+  mkChart('ch-bk-mes','bar',mesE.map(e=>{const [y,m]=e[0].split('-');return MESES[+m].slice(0,3)+' '+y.slice(2)}),[{label:'Comisión',data:mesE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  const s=sortState.bk; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+  lastFiltered.bk = rows;
+  document.getElementById('t-bk-n').textContent = `Detalle comisiones Booking (${rows.length})`;
+  document.getElementById('t-bk').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('bk','fecha')">Fecha</th><th onclick="sortTable('bk','propBK')">Propiedad BK</th>
+      <th onclick="sortTable('bk','dep')">Depto</th><th onclick="sortTable('bk','hue')">Huésped</th>
+      <th class="num" onclick="sortTable('bk','ing')">Ingreso</th>
+      <th class="num" onclick="sortTable('bk','com')">Comisión</th><th>Moneda</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td><b>${r.propBK}</b></td><td>${r.dep}</td><td>${r.hue}</td>
+      <td class="num">${fmt(val(r,'ing'))}</td>
+      <td class="num"><b>${fmt(val(r,'com'))}</b></td>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
+  </table>`;
+}
+
+/* ---------- CONCILIACION ---------- */
+function renderCon(){
+  const ano=msGet('ms-con-ano');
+  const rows = ROWS.filter(r=>ano.has(r.ano));
+  const byM = {};
+  rows.forEach(r=>{
+    if(!r.mes||!r.ano) return;
+    const k = r.ano+'-'+String(r.mes).padStart(2,'0');
+    byM[k] = byM[k] || {ing:0,egr:0,com:0,n:0};
+    byM[k].ing += val(r,'ing');
+    byM[k].egr += val(r,'egr');
+    byM[k].com += val(r,'com');
+    if(r.ing!==0) byM[k].n++;
+  });
+  const keys = Object.keys(byM).sort();
+  const labels = keys.map(k=>{const [y,m]=k.split('-');return MESES[+m]+' '+y});
+  const ings = keys.map(k=>byM[k].ing), egrs = keys.map(k=>byM[k].egr);
+  const res = keys.map((k,i)=>ings[i]-egrs[i]);
+  const totI = ings.reduce((a,b)=>a+b,0), totE = egrs.reduce((a,b)=>a+b,0), totR = totI-totE;
+  const margen = totI ? (totR/totI*100) : 0;
+  document.getElementById('k-con').innerHTML = `
+    <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
+    <div class="kpi"><div class="t">Egresos</div><div class="v red">${fmtM(totE)}</div></div>
+    <div class="kpi"><div class="t">Resultado</div><div class="v ${totR>=0?'pos':'negv'}">${fmtM(totR)}</div></div>
+    <div class="kpi"><div class="t">Margen</div><div class="v gold">${margen.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="t">Comisiones Booking</div><div class="v">${fmtM(keys.reduce((a,k)=>a+byM[k].com,0))}</div></div>`;
+  mkChart('ch-con-evo','line',labels,[
+    {label:'Ingresos',data:ings,borderColor:'#2ecc71',backgroundColor:'rgba(46,204,113,.12)',fill:true,tension:.3,pointRadius:3},
+    {label:'Egresos',data:egrs,borderColor:'#CC1414',backgroundColor:'rgba(204,20,20,.12)',fill:true,tension:.3,pointRadius:3}]);
+  mkChart('ch-con-res','bar',labels,[{label:'Resultado',data:res,backgroundColor:res.map(v=>v>=0?'#2ecc71':'#ff5c5c'),borderRadius:6}]);
+  lastFiltered.con = keys.map((k,i)=>({mes:labels[i],ing:ings[i],egr:egrs[i],res:res[i],margen:ings[i]?((res[i]/ings[i])*100).toFixed(1)+'%':'—',reservas:byM[k].n,com:byM[k].com}));
+  document.getElementById('t-con').innerHTML = `<table>
+    <thead><tr><th>Mes</th><th class="num">Reservas</th><th class="num">Ingresos</th><th class="num">Egresos</th><th class="num">Comisión BK</th><th class="num">Resultado</th><th class="num">Margen</th></tr></thead>
+    <tbody>${lastFiltered.con.map(r=>`<tr>
+      <td><b>${r.mes}</b></td><td class="num">${r.reservas}</td>
+      <td class="num" style="color:var(--green)">${fmt(r.ing)}</td>
+      <td class="num" style="color:var(--neg)">${fmt(r.egr)}</td>
+      <td class="num">${fmt(r.com)}</td>
+      <td class="num"><b style="color:${r.res>=0?'var(--green)':'var(--neg)'}">${fmt(r.res)}</b></td>
+      <td class="num">${r.margen}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td class="num">${lastFiltered.con.reduce((a,r)=>a+r.reservas,0)}</td>
+      <td class="num">${fmt(totI)}</td><td class="num">${fmt(totE)}</td>
+      <td class="num">${fmt(lastFiltered.con.reduce((a,r)=>a+r.com,0))}</td>
+      <td class="num">${fmt(totR)}</td><td class="num">${margen.toFixed(1)}%</td></tr></tfoot>
+  </table>`;
+}
+
+/* ---------- EXPORT ---------- */
+function expCSV(view){
+  let head, lines;
+  if(view==='con'){
+    head = ['Mes','Reservas','Ingresos','Egresos','Comision BK','Resultado','Margen'];
+    lines = lastFiltered.con.map(r=>[r.mes,r.reservas,r.ing,r.egr,r.com,r.res,r.margen]);
+  } else if(view==='egr'){
+    head = ['Fecha','Edificio','Concepto','Detalle','Importe','Moneda'];
+    lines = lastFiltered.egr.map(r=>[r.fecha,r.edificio,r.cptEgr,r.detalle,val(r,'egr'),r.moneda]);
+  } else if(view==='bk'){
+    head = ['Fecha','Propiedad BK','Depto','Huesped','Ingreso','Comision','Moneda'];
+    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,val(r,'ing'),val(r,'com'),r.moneda]);
+  } else {
+    head = ['Fecha','Depto','Plataforma','Huesped','Noches','Importe','Moneda','Forma de pago','Donde','Debe'];
+    lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.noches,val(r,'ing'),r.moneda,r.formaPago,r.donde,r.debe?'SI':'NO']);
+  }
+  const csv = [head,...lines].map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'}));
+  a.download = `rent2888_${view}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+/* ---------- CONFIG ---------- */
+function openCfg(){
+  document.getElementById('cfgId').value = cfg.id;
+  document.getElementById('cfgGid').value = cfg.gid;
+  document.getElementById('cfgPw').value = '';
+  document.getElementById('cfgBg').classList.add('on');
+}
+function closeCfg(){ document.getElementById('cfgBg').classList.remove('on'); }
+function saveCfg(){
+  localStorage.setItem('r28_id', document.getElementById('cfgId').value.trim());
+  localStorage.setItem('r28_gid', document.getElementById('cfgGid').value.trim());
+  const pw = document.getElementById('cfgPw').value.trim();
+  if(pw) localStorage.setItem('r28_pw', pw);
+  closeCfg(); loadData();
+}
+setCur(CUR);
+</script>
+</body>
+</html>
