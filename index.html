@@ -98,6 +98,8 @@ th.num{text-align:right}
 .modal .row button{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);font-weight:700;cursor:pointer;font-family:inherit}
 .modal .row button.pri{background:var(--red);border-color:var(--red);color:#fff}
 #upd{font-size:11px;color:var(--muted);white-space:nowrap}
+.perSel{background:var(--panel);border:1px solid var(--border);color:var(--txt);border-radius:9px;padding:9px 12px;font-family:inherit;font-size:13px;min-width:190px;cursor:pointer}
+.perSel:focus{outline:none;border-color:var(--red)}
 ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 </style>
 </head>
@@ -136,6 +138,7 @@ th.num{text-align:right}
   <div id="status">Cargando datos del Sheet…</div>
 
   <div class="view" id="v-ing">
+    <div id="warnF"></div>
     <div class="filters">
       <div class="f"><label>Departamento</label><div class="ms" id="ms-ing-dep"></div></div>
       <div class="f"><label>Plataforma</label><div class="ms" id="ms-ing-pla"></div></div>
@@ -207,6 +210,9 @@ th.num{text-align:right}
 
   <div class="view" id="v-con">
     <div class="filters">
+      <div class="f"><label>Período (por fecha de ingreso)</label>
+        <select class="perSel" id="sel-con-per" onchange="render()"></select>
+      </div>
       <div class="f"><label>Año</label><div class="ms" id="ms-con-ano"></div></div>
     </div>
     <div class="kpis" id="k-con"></div>
@@ -227,6 +233,7 @@ th.num{text-align:right}
     <h2>⚙ Configuración</h2>
     <label>ID del Google Sheet</label><input id="cfgId">
     <label>Nombre de la pestaña de datos</label><input id="cfgTab" placeholder="$$$">
+    <label>Pestaña cotización MEP</label><input id="cfgMep" placeholder="cotizacion MEP">
     <label>Nueva contraseña (opcional)</label><input id="cfgPw" placeholder="dejar vacío para no cambiar">
     <div class="row">
       <button onclick="closeCfg()">Cancelar</button>
@@ -237,10 +244,11 @@ th.num{text-align:right}
 
 <script>
 /* ================= CONFIG ================= */
-const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', tab:'$$$', pass:'rent2888' };
+const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', tab:'$$$', mep:'cotizacion MEP', pass:'rent2888' };
 const cfg = {
   get id(){ return localStorage.getItem('r28_id') || DEF.id },
   get tab(){ return localStorage.getItem('r28_tab') || DEF.tab },
+  get mep(){ return localStorage.getItem('r28_mep') || DEF.mep },
   get pass(){ return localStorage.getItem('r28_pw') || DEF.pass },
 };
 /* ================= LOGIN ================= */
@@ -312,16 +320,40 @@ let charts = {};
 let msState = {};
 let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
 
+let MEP = [];       // [{s: serial yyyymmdd, rate}] ordenado
+let SIN_FECHA = []; // ingresos sin fecha de ingreso (col F vacía)
+function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
+function mepRate(f){
+  if(!MEP.length) return 0;
+  const s = serial(f);
+  let lo=0, hi=MEP.length-1, best=MEP[0];
+  for(let i=0;i<MEP.length;i++){ if(MEP[i].s<=s) best=MEP[i]; else break; }
+  return best.rate;
+}
 async function loadData(){
   const st = document.getElementById('status');
   st.style.display='block'; st.textContent='Cargando datos del Sheet…';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   try{
-    const url = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(cfg.tab)}&t=${Date.now()}`;
-    const res = await fetch(url);
+    const base = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&t=${Date.now()}&sheet=`;
+    const [res, resM] = await Promise.all([
+      fetch(base+encodeURIComponent(cfg.tab)),
+      fetch(base+encodeURIComponent(cfg.mep))
+    ]);
     if(!res.ok) throw new Error('HTTP '+res.status+' — no se pudo leer la pestaña "'+cfg.tab+'"');
     const text = await res.text();
     const raw = parseCSV(text);
+
+    // --- cotización MEP: col A fecha, col B cotización ---
+    MEP = [];
+    if(resM.ok){
+      const rawM = parseCSV(await resM.text());
+      for(const r of rawM){
+        const f = parseFecha(r[0]||''); const rate = pn(r[1]);
+        if(f && rate>100 && rate<1000000) MEP.push({s:serial(f), rate});
+      }
+      MEP.sort((a,b)=>a.s-b.s);
+    }
     if(raw.length<2) throw new Error('La pestaña "'+cfg.tab+'" está vacía');
 
     // buscar la fila de encabezados (tiene 'mes/ano' y 'Departamento')
@@ -334,7 +366,7 @@ async function loadData(){
     const ix = {}; H.forEach((h,i)=>{ if(!(h in ix)) ix[h]=i; });
     const g = (r,name)=> (ix[name]!=null && r[ix[name]]!=null) ? String(r[ix[name]]).trim() : '';
 
-    ROWS = [];
+    ROWS = []; SIN_FECHA = [];
     for(let i=hi+1;i<raw.length;i++){
       const r = raw[i];
       if(!r || r.every(c=>!String(c).trim())) continue;
@@ -354,17 +386,34 @@ async function loadData(){
       const monedaRaw = g(r,'Moneda').toUpperCase();
       const isUSD = monedaRaw.includes('U');
 
-      // valores — columnas que usa el portal de propietarios que ya funciona:
-      //  USD: 'Ingresos Total $' (todo convertido a u$s) / 'Egresos $ a u$'
-      //  ARS: 'Ingresos u$ a $' (u$s convertidos) o 'TOTAL' (pesos originales) / 'Egresos u$ a $' o 'Egresos'
-      const ingU = pn(g(r,'Ingresos Total $'));
-      const ingA = pn(g(r,'Ingresos u$ a $')) || pn(g(r,'TOTAL'));
-      const egrU = pn(g(r,'Egresos $ a u$'));
-      const egrA = pn(g(r,'Egresos u$ a $')) || pn(g(r,'Egresos'));
+      // referencia temporal: FECHA DE INGRESO (col F); si está vacía, col A (Fecha)
+      const fIngreso = parseFecha(g(r,'Fecha de ingreso'));
+      const fRef = fIngreso || parseFecha(g(r,'Fecha'));
+      const mesF = fRef ? fRef.m : mes, anoF = fRef ? fRef.y : ano;
+      const mesanoF = (mesF&&anoF) ? mesF+'/'+anoF : mesano;
+
+      // INGRESOS: col I ('Ingresos carga'), con signo (negativos restan). Moneda: col L.
+      // Dolarización de pesos: cotización MEP por fecha (col F, o col A si F vacía).
+      const ing  = pn(g(r,'Ingresos carga'));
+      const rate = mepRate(fRef);
+      const ingU = isUSD ? ing : (rate ? ing/rate : 0);
+      const ingA = isUSD ? (rate ? ing*rate : 0) : ing;
+
+      // EGRESOS (col X, en valor absoluto) — conversión con las columnas del Excel o MEP
+      const egrRaw = pn(g(r,'Egresos'));
+      const egrU = pn(g(r,'Egresos $ a u$')) || (isUSD ? Math.abs(egrRaw) : (rate ? Math.abs(egrRaw)/rate : 0));
+      const egrA = pn(g(r,'Egresos u$ a $')) || (!isUSD ? Math.abs(egrRaw) : (rate ? Math.abs(egrRaw)*rate : 0));
+
+      // COMISIÓN BK: col K, moneda col L, a pesos/dólares vía MEP
       const com  = pn(g(r,'Comision BK'));
+      const comU = isUSD ? com : (rate ? com/rate : 0);
+      const comA = isUSD ? (rate ? com*rate : 0) : com;
+
+      const sinF = (ing!==0) && !fIngreso;
+      if(sinF) SIN_FECHA.push({fecha:g(r,'Fecha'), dep:g(r,'Departamento'), hue:g(r,'Huésped'), ing, moneda:isUSD?'u$s':'$'});
 
       ROWS.push({
-        fecha: g(r,'Fecha'), mes, ano, mesano,
+        fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF, sinF,
         dep: g(r,'Departamento'), pla: g(r,'Plataforma'),
         cptIng: g(r,'Concepto Ingresos'),
         hue: g(r,'Huésped'), noches: pn(g(r,'Noches')),
@@ -373,25 +422,14 @@ async function loadData(){
         formaPago: g(r,'Forma de pago'), donde: g(r,'Donde $?'),
         debe: g(r,'Debe (sí/no)').toUpperCase().startsWith('S'),
         propBK: g(r,'Propiedad BK'), propietario: g(r,'Propietario'),
-        edificio: g(r,'Edificio'), cptEgr: g(r,'Concepto Egresos'), detalle: g(r,'Detalle'),
-        ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), com,
+        edificio: g(r,'Edificio'),
+        cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
+        detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
+        ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), com, comU, comA,
       });
     }
 
-    // tasa de cambio por mes (mediana de ingA/ingU) para convertir comisiones BK
-    const rates = {};
-    ROWS.forEach(r=>{ if(r.ingU>1 && r.ingA>1){ (rates[r.mesano]=rates[r.mesano]||[]).push(r.ingA/r.ingU); } });
-    const RATE = {}; let allR=[];
-    for(const k in rates){ const v=rates[k].sort((a,b)=>a-b); RATE[k]=v[Math.floor(v.length/2)]; allR=allR.concat(v); }
-    allR.sort((a,b)=>a-b);
-    const globalRate = allR.length ? allR[Math.floor(allR.length/2)] : 1000;
-    ROWS.forEach(r=>{
-      const rate = RATE[r.mesano] || globalRate;
-      if(r.moneda==='USD'){ r.comU = r.com; r.comA = r.com*rate; }
-      else { r.comA = r.com; r.comU = r.com/rate; }
-    });
-
-    ING = ROWS.filter(r=>(r.ingU!==0||r.ingA!==0) && r.dep);
+    ING = ROWS.filter(r=>r.ing!==0 && r.dep);
     EGR = ROWS.filter(r=>(r.egrU!==0||r.egrA!==0) && r.cptEgr);
     BK  = ROWS.filter(r=>r.com!==0);
     document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
@@ -474,7 +512,14 @@ function buildFilters(){
   makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro');
   makeMS('ms-bk-ano', anos, 'ano', false, [curY]);
   makeMS('ms-bk-mes', meses, 'mes');
-  makeMS('ms-con-ano', anos, 'ano', false, [curY]);
+  const anosF = ROWS.map(r=>r.anoF).filter(Boolean);
+  makeMS('ms-con-ano', anosF, 'ano', false, [Math.max(...anosF,0)]);
+  // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
+  const pers = [...new Set(ROWS.map(r=>r.mesanoF).filter(Boolean))].sort(spMesAno);
+  const sel = document.getElementById('sel-con-per');
+  sel.innerHTML = '<option value="all">Todos los meses</option>' +
+    pers.map(p=>{const [m,y]=p.split('/');return `<option value="${p}">${MESES[+m]} ${y}</option>`}).join('');
+  sel.value = 'all';
 }
 
 /* ================= VIEWS ================= */
@@ -537,17 +582,28 @@ function render(){
 
 /* ---------- INGRESOS ---------- */
 function renderIng(){
+  // aviso de filas sin fecha de ingreso (col F)
+  const w = document.getElementById('warnF');
+  if(SIN_FECHA.length){
+    w.innerHTML = `<div style="background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.4);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+      ⚠ <b>${SIN_FECHA.length} ingreso${SIN_FECHA.length>1?'s':''} sin fecha de ingreso (col F)</b> — se usó la fecha de carga (col A).
+      <a href="#" onclick="document.getElementById('warnFDet').style.display='block';return false" style="color:var(--gold)">Ver detalle</a>
+      <div id="warnFDet" style="display:none;margin-top:8px;max-height:150px;overflow-y:auto;color:var(--muted)">
+        ${SIN_FECHA.map(x=>`${x.fecha} · ${x.dep} · ${x.hue||'(sin huésped)'} · ${x.moneda} ${fmt(x.ing)}`).join('<br>')}
+      </div></div>`;
+  } else w.innerHTML='';
   const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), ano=msGet('ms-ing-ano'), mes=msGet('ms-ing-mes');
   let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&ano.has(r.ano)&&mes.has(r.mes));
+  const totU = rows.reduce((a,r)=>a+r.ingU,0);
   const tot = rows.reduce((a,r)=>a+vIng(r),0);
-  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ingU,0);
-  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ingA,0);
+  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ing,0);
+  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ing,0);
   const noches = rows.reduce((a,r)=>a+r.noches,0);
   const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+vIng(r),0);
   document.getElementById('k-ing').innerHTML = `
-    <div class="kpi"><div class="t">Ingresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(tot)}</div></div>
-    <div class="kpi"><div class="t">Cobrado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
-    <div class="kpi"><div class="t">Cobrado en AR$</div><div class="v">$ ${fmt(totARS)}</div></div>
+    <div class="kpi"><div class="t">Ingresos totales (siempre u$s · MEP)</div><div class="v pos">u$s ${fmt(totU)}</div></div>
+    <div class="kpi"><div class="t">Cobrado en u$s (col I)</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
+    <div class="kpi"><div class="t">Cobrado en AR$ (col I)</div><div class="v">$ ${fmt(totARS)}</div></div>
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
     <div class="kpi"><div class="t">Debe / pendiente</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
   const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+vIng(r));
@@ -678,11 +734,14 @@ function renderBk(){
   const tot = rows.reduce((a,r)=>a+vCom(r),0);
   const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+vCom(r));
   const proE = Object.entries(byPro).sort((a,b)=>b[1]-a[1]);
+  const totA = rows.reduce((a,r)=>a+r.comA,0);
+  const totU = rows.reduce((a,r)=>a+r.comU,0);
   document.getElementById('k-bk').innerHTML = `
-    <div class="kpi"><div class="t">Comisión Booking total (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
+    <div class="kpi"><div class="t">Comisión BK en pesos (col K→$)</div><div class="v red">$ ${fmt(totA)}</div></div>
+    <div class="kpi"><div class="t">Comisión BK en u$s</div><div class="v gold">u$s ${fmt(totU)}</div></div>
     <div class="kpi"><div class="t">Reservas con comisión</div><div class="v">${rows.length}</div></div>
     <div class="kpi"><div class="t">Propiedades</div><div class="v">${proE.length}</div></div>
-    <div class="kpi"><div class="t">Promedio por reserva</div><div class="v gold">${fmtM(rows.length?tot/rows.length:0)}</div></div>`;
+    <div class="kpi"><div class="t">Promedio por reserva</div><div class="v">${fmtM(rows.length?tot/rows.length:0)}</div></div>`;
   mkChart('ch-bk-pro','bar',proE.map(e=>e[0]),[{label:'Comisión',data:proE.map(e=>e[1]),backgroundColor:'#2e86de',borderRadius:6}]);
   const byMes={}; rows.forEach(r=>{byMes[r.mesano]=(byMes[r.mesano]||0)+vCom(r);});
   const mesE = Object.entries(byMes).sort((a,b)=>spMesAno(a[0],b[0]));
@@ -706,14 +765,16 @@ function renderBk(){
   </table>`;
 }
 
-/* ---------- CONCILIACION ---------- */
+/* ---------- CONCILIACION (referencia: fecha de ingreso, col F) ---------- */
 function renderCon(){
   const ano=msGet('ms-con-ano');
-  const rows = ROWS.filter(r=>ano.has(r.ano));
+  const per = document.getElementById('sel-con-per').value;
+  let rows = ROWS.filter(r=>ano.has(r.anoF));
+  if(per!=='all') rows = ROWS.filter(r=>r.mesanoF===per);
   const byM = {};
   rows.forEach(r=>{
-    if(!r.mesano) return;
-    const b = byM[r.mesano] = byM[r.mesano] || {ing:0,egr:0,com:0,n:0};
+    if(!r.mesanoF) return;
+    const b = byM[r.mesanoF] = byM[r.mesanoF] || {ing:0,egr:0,com:0,n:0};
     b.ing += vIng(r);
     b.egr += vEgr(r);
     b.com += vCom(r);
@@ -782,6 +843,7 @@ function expCSV(view){
 function openCfg(){
   document.getElementById('cfgId').value = cfg.id;
   document.getElementById('cfgTab').value = cfg.tab;
+  document.getElementById('cfgMep').value = cfg.mep;
   document.getElementById('cfgPw').value = '';
   document.getElementById('cfgBg').classList.add('on');
 }
@@ -789,6 +851,7 @@ function closeCfg(){ document.getElementById('cfgBg').classList.remove('on'); }
 function saveCfg(){
   localStorage.setItem('r28_id', document.getElementById('cfgId').value.trim());
   localStorage.setItem('r28_tab', document.getElementById('cfgTab').value.trim() || '$$$');
+  localStorage.setItem('r28_mep', document.getElementById('cfgMep').value.trim() || 'cotizacion MEP');
   const pw = document.getElementById('cfgPw').value.trim();
   if(pw) localStorage.setItem('r28_pw', pw);
   closeCfg(); loadData();
