@@ -234,6 +234,7 @@ th.num{text-align:right}
     <label>ID del Google Sheet</label><input id="cfgId">
     <label>Nombre de la pestaña de datos</label><input id="cfgTab" placeholder="$$$">
     <label>Pestaña cotización MEP</label><input id="cfgMep" placeholder="cotizacion MEP">
+    <label>Pestaña deptos activos</label><input id="cfgPtab" placeholder="Departamento - Propietario - Edificio">
     <label>Nueva contraseña (opcional)</label><input id="cfgPw" placeholder="dejar vacío para no cambiar">
     <div class="row">
       <button onclick="closeCfg()">Cancelar</button>
@@ -244,11 +245,12 @@ th.num{text-align:right}
 
 <script>
 /* ================= CONFIG ================= */
-const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', tab:'$$$', mep:'cotizacion MEP', pass:'rent2888' };
+const DEF = { id:'1dBQzIqkRXzRVreJxecQT0XD1jslrBRI0PcCXZT7huRw', tab:'$$$', mep:'cotizacion MEP', ptab:'Departamento - Propietario - Edificio', pass:'rent2888' };
 const cfg = {
   get id(){ return localStorage.getItem('r28_id') || DEF.id },
   get tab(){ return localStorage.getItem('r28_tab') || DEF.tab },
   get mep(){ return localStorage.getItem('r28_mep') || DEF.mep },
+  get ptab(){ return localStorage.getItem('r28_ptab') || DEF.ptab },
   get pass(){ return localStorage.getItem('r28_pw') || DEF.pass },
 };
 /* ================= LOGIN ================= */
@@ -322,6 +324,7 @@ let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
 
 let MEP = [];       // [{s: serial yyyymmdd, rate}] ordenado
 let SIN_FECHA = []; // ingresos sin fecha de ingreso (col F vacía)
+let ACTIVOS = new Set(); // deptos activos (solapa Departamento-Propietario-Edificio, col E='Activo')
 function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
 function mepRate(f){
   if(!MEP.length) return 0;
@@ -336,9 +339,10 @@ async function loadData(){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   try{
     const base = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&t=${Date.now()}&sheet=`;
-    const [res, resM] = await Promise.all([
+    const [res, resM, resP] = await Promise.all([
       fetch(base+encodeURIComponent(cfg.tab)),
-      fetch(base+encodeURIComponent(cfg.mep))
+      fetch(base+encodeURIComponent(cfg.mep)),
+      fetch(base+encodeURIComponent(cfg.ptab))
     ]);
     if(!res.ok) throw new Error('HTTP '+res.status+' — no se pudo leer la pestaña "'+cfg.tab+'"');
     const text = await res.text();
@@ -353,6 +357,23 @@ async function loadData(){
         if(f && rate>100 && rate<1000000) MEP.push({s:serial(f), rate});
       }
       MEP.sort((a,b)=>a.s-b.s);
+    }
+
+    // --- deptos ACTIVOS: solapa 'Departamento - Propietario - Edificio', col A nombre, col E estado ---
+    // Los EDIFICIOS (col F de esa solapa + lista fija) se excluyen aunque digan Activo
+    ACTIVOS = new Set();
+    const EDIFICIOS = new Set(['monta','italiano','fleni','caballito']);
+    if(resP.ok){
+      const rawP = parseCSV(await resP.text());
+      for(const r of rawP){
+        const ed = (r[5]||'').trim().toLowerCase();
+        if(ed && !ed.includes('edif')) EDIFICIOS.add(ed);
+      }
+      for(const r of rawP){
+        const d = (r[0]||'').trim();
+        const est = (r[4]||'').trim().toLowerCase();
+        if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIFICIOS.has(d.toLowerCase())) ACTIVOS.add(d);
+      }
     }
     if(raw.length<2) throw new Error('La pestaña "'+cfg.tab+'" está vacía');
 
@@ -410,7 +431,9 @@ async function loadData(){
       const comA = isUSD ? (rate ? com*rate : 0) : com;
 
       const sinF = (ing!==0) && !fIngreso;
-      if(sinF) SIN_FECHA.push({fecha:g(r,'Fecha'), dep:g(r,'Departamento'), hue:g(r,'Huésped'), ing, moneda:isUSD?'u$s':'$'});
+      const depName = g(r,'Departamento');
+      if(sinF && anoF>=2026 && (!ACTIVOS.size || ACTIVOS.has(depName)))
+        SIN_FECHA.push({fecha:g(r,'Fecha'), dep:depName, hue:g(r,'Huésped'), ing, moneda:isUSD?'u$s':'$'});
 
       ROWS.push({
         fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF, sinF,
@@ -426,10 +449,11 @@ async function loadData(){
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
         ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), com, comU, comA,
+        tc: (!isUSD && ing!==0) ? rate : 0,
       });
     }
 
-    ING = ROWS.filter(r=>r.ing!==0 && r.dep);
+    ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep)));
     EGR = ROWS.filter(r=>(r.egrU!==0||r.egrA!==0) && r.cptEgr);
     BK  = ROWS.filter(r=>r.com!==0);
     document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
@@ -541,6 +565,9 @@ function setCur(c){
 function vIng(r){ return CUR==='USD' ? r.ingU : r.ingA; }
 function vEgr(r){ return CUR==='USD' ? r.egrU : r.egrA; }
 function vCom(r){ return CUR==='USD' ? r.comU : r.comA; }
+// ingreso efectivo: si DEBE (col M), no suma al total hasta que se cobre
+function effIng(r){ return r.debe ? 0 : vIng(r); }
+function effIngU(r){ return r.debe ? 0 : r.ingU; }
 
 function mkChart(id, type, labels, datasets, opts={}){
   if(charts[id]) charts[id].destroy();
@@ -594,22 +621,22 @@ function renderIng(){
   } else w.innerHTML='';
   const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), ano=msGet('ms-ing-ano'), mes=msGet('ms-ing-mes');
   let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&ano.has(r.ano)&&mes.has(r.mes));
-  const totU = rows.reduce((a,r)=>a+r.ingU,0);
-  const tot = rows.reduce((a,r)=>a+vIng(r),0);
-  const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.ing,0);
-  const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.ing,0);
+  const totU = rows.reduce((a,r)=>a+effIngU(r),0);
+  const tot = rows.reduce((a,r)=>a+effIng(r),0);
+  const totUSD = rows.filter(r=>r.moneda==='USD'&&!r.debe).reduce((a,r)=>a+r.ing,0);
+  const totARS = rows.filter(r=>r.moneda==='ARS'&&!r.debe).reduce((a,r)=>a+r.ing,0);
   const noches = rows.reduce((a,r)=>a+r.noches,0);
   const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+vIng(r),0);
   document.getElementById('k-ing').innerHTML = `
-    <div class="kpi"><div class="t">Ingresos totales (siempre u$s · MEP)</div><div class="v pos">u$s ${fmt(totU)}</div></div>
+    <div class="kpi"><div class="t">Ingresos totales (siempre u$s · MEP)</div><div class="v pos">u$s ${fmt(totU)}</div><div class="s">sin lo adeudado (col M)</div></div>
     <div class="kpi"><div class="t">Cobrado en u$s (col I)</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
     <div class="kpi"><div class="t">Cobrado en AR$ (col I)</div><div class="v">$ ${fmt(totARS)}</div></div>
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
-    <div class="kpi"><div class="t">Debe / pendiente</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
-  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+vIng(r));
+    <div class="kpi"><div class="t">Debe / pendiente (no suma)</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
+  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
   mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
-  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+vIng(r));
+  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+effIng(r));
   const plaE = Object.entries(byPla).sort((a,b)=>b[1]-a[1]);
   mkChart('ch-ing-pla','doughnut',plaE.map(e=>e[0]),[{data:plaE.map(e=>e[1]),backgroundColor:PALETTE,borderWidth:0}],{cutout:'62%'});
   const s=sortState.ing; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
@@ -619,18 +646,22 @@ function renderIng(){
     <thead><tr>
       <th onclick="sortTable('ing','fecha')">Fecha</th><th onclick="sortTable('ing','dep')">Depto</th>
       <th onclick="sortTable('ing','pla')">Plataforma</th><th onclick="sortTable('ing','hue')">Huésped</th>
+      <th onclick="sortTable('ing','fIn')">In (col F)</th><th onclick="sortTable('ing','fOut')">Out (col H)</th>
       <th class="num" onclick="sortTable('ing','noches')">Noches</th>
       <th class="num" onclick="sortTable('ing','ingU')">Importe</th><th>Moneda orig.</th>
+      <th class="num">TC MEP</th>
       <th onclick="sortTable('ing','formaPago')">Forma de pago</th><th onclick="sortTable('ing','donde')">Dónde $</th><th>Debe</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td>${r.fecha}</td><td><b>${r.dep}</b></td><td>${r.pla}</td><td>${r.hue}</td>
+      <td>${r.fIn||'<span style="color:var(--neg)">—</span>'}</td><td>${r.fOut||''}</td>
       <td class="num">${r.noches||''}</td>
       <td class="num"><b>${fmt(vIng(r))}</b></td>
       <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
+      <td class="num" style="color:var(--muted)">${r.tc?fmt(r.tc):''}</td>
       <td>${r.formaPago}</td><td>${r.donde}</td>
       <td>${r.debe?'<span class="pill debe">DEBE</span>':''}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td colspan="4"></td></tr></tfoot>
+    <tfoot><tr><td colspan="7">TOTAL cobrado (${rows.length})</td><td class="num">${fmt(tot)}</td><td colspan="5"></td></tr></tfoot>
   </table>`;
 }
 
@@ -675,7 +706,7 @@ function renderDep(){
   const dep=msGet('ms-dep-dep'), ano=msGet('ms-dep-ano'), mes=msGet('ms-dep-mes');
   const iRows = ING.filter(r=>dep.has(r.dep)&&ano.has(r.ano)&&mes.has(r.mes));
   const eRows = EGR.filter(r=>dep.has(r.dep||r.edificio)&&ano.has(r.ano)&&mes.has(r.mes));
-  const totI = iRows.reduce((a,r)=>a+vIng(r),0);
+  const totI = iRows.reduce((a,r)=>a+effIng(r),0);
   const totE = eRows.reduce((a,r)=>a+vEgr(r),0);
   const totR = totI-totE;
   const noches = iRows.reduce((a,r)=>a+r.noches,0);
@@ -683,11 +714,11 @@ function renderDep(){
     <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
     <div class="kpi"><div class="t">Egresos</div><div class="v red">${fmtM(totE)}</div></div>
     <div class="kpi"><div class="t">Resultado</div><div class="v ${totR>=0?'pos':'negv'}">${fmtM(totR)}</div></div>
-    <div class="kpi"><div class="t">Margen</div><div class="v gold">${totI?((totR/totI)*100).toFixed(1):'0'}%</div></div>
+    <div class="kpi"><div class="t">Margen</div><div class="v gold">${totI?((totR/totI)*100).toFixed(0):'0'}%</div></div>
     <div class="kpi"><div class="t">Reservas</div><div class="v">${iRows.length}</div><div class="s">${fmt(noches)} noches</div></div>`;
   // agrupado por depto
   const agg = {};
-  iRows.forEach(r=>{ const a=agg[r.dep]=agg[r.dep]||{dep:r.dep,ing:0,egr:0,n:0,noches:0}; a.ing+=vIng(r); a.n++; a.noches+=r.noches; });
+  iRows.forEach(r=>{ const a=agg[r.dep]=agg[r.dep]||{dep:r.dep,ing:0,egr:0,n:0,noches:0}; a.ing+=effIng(r); a.n++; a.noches+=r.noches; });
   eRows.forEach(r=>{ const k=r.dep||r.edificio; const a=agg[k]=agg[k]||{dep:k,ing:0,egr:0,n:0,noches:0}; a.egr+=vEgr(r); });
   let list = Object.values(agg).map(a=>({...a, res:a.ing-a.egr, margen:a.ing?((a.ing-a.egr)/a.ing*100):0}));
   const s=sortState.dep; list.sort((a,b)=>cmp(a,b,s.key,s.asc));
@@ -697,7 +728,7 @@ function renderDep(){
   mkChart('ch-dep-res','bar',top.map(e=>e.dep),[{label:'Resultado',data:top.map(e=>e.res),backgroundColor:top.map(e=>e.res>=0?'#2ecc71':'#ff5c5c'),borderRadius:5}]);
   // evolución mensual de la selección
   const byM={};
-  iRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.i+=vIng(r); });
+  iRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.i+=effIng(r); });
   eRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.e+=vEgr(r); });
   const keys = Object.keys(byM).sort(spMesAno);
   const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)});
@@ -720,10 +751,10 @@ function renderDep(){
       <td class="num" style="color:var(--green)">${fmt(a.ing)}</td>
       <td class="num" style="color:var(--neg)">${fmt(a.egr)}</td>
       <td class="num"><b style="color:${a.res>=0?'var(--green)':'var(--neg)'}">${fmt(a.res)}</b></td>
-      <td class="num">${a.ing?a.margen.toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>
+      <td class="num">${a.ing?a.margen.toFixed(0)+'%':'—'}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>TOTAL</td><td class="num">${iRows.length}</td><td class="num">${fmt(noches)}</td>
       <td class="num">${fmt(totI)}</td><td class="num">${fmt(totE)}</td><td class="num">${fmt(totR)}</td>
-      <td class="num">${totI?((totR/totI)*100).toFixed(1)+'%':'—'}</td></tr></tfoot>
+      <td class="num">${totI?((totR/totI)*100).toFixed(0)+'%':'—'}</td></tr></tfoot>
   </table>`;
 }
 
@@ -775,10 +806,10 @@ function renderCon(){
   rows.forEach(r=>{
     if(!r.mesanoF) return;
     const b = byM[r.mesanoF] = byM[r.mesanoF] || {ing:0,egr:0,com:0,n:0};
-    b.ing += vIng(r);
+    b.ing += (ACTIVOS.size && r.ing!==0 && !ACTIVOS.has(r.dep)) ? 0 : effIng(r);
     b.egr += vEgr(r);
     b.com += vCom(r);
-    if(r.ingU!==0||r.ingA!==0) b.n++;
+    if(r.ing!==0) b.n++;
   });
   const keys = Object.keys(byM).sort(spMesAno);
   const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m]+' '+y});
@@ -790,13 +821,13 @@ function renderCon(){
     <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
     <div class="kpi"><div class="t">Egresos</div><div class="v red">${fmtM(totE)}</div></div>
     <div class="kpi"><div class="t">Resultado</div><div class="v ${totR>=0?'pos':'negv'}">${fmtM(totR)}</div></div>
-    <div class="kpi"><div class="t">Margen</div><div class="v gold">${margen.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="t">Margen</div><div class="v gold">${margen.toFixed(0)}%</div></div>
     <div class="kpi"><div class="t">Comisiones Booking</div><div class="v">${fmtM(keys.reduce((a,k)=>a+byM[k].com,0))}</div></div>`;
   mkChart('ch-con-evo','line',labels,[
     {label:'Ingresos',data:ings,borderColor:'#2ecc71',backgroundColor:'rgba(46,204,113,.12)',fill:true,tension:.3,pointRadius:3},
     {label:'Egresos',data:egrs,borderColor:'#CC1414',backgroundColor:'rgba(204,20,20,.12)',fill:true,tension:.3,pointRadius:3}]);
   mkChart('ch-con-res','bar',labels,[{label:'Resultado',data:res,backgroundColor:res.map(v=>v>=0?'#2ecc71':'#ff5c5c'),borderRadius:6}]);
-  lastFiltered.con = keys.map((k,i)=>({mes:labels[i],ing:ings[i],egr:egrs[i],res:res[i],margen:ings[i]?((res[i]/ings[i])*100).toFixed(1)+'%':'—',reservas:byM[k].n,com:byM[k].com}));
+  lastFiltered.con = keys.map((k,i)=>({mes:labels[i],ing:ings[i],egr:egrs[i],res:res[i],margen:ings[i]?((res[i]/ings[i])*100).toFixed(0)+'%':'—',reservas:byM[k].n,com:byM[k].com}));
   document.getElementById('t-con').innerHTML = `<table>
     <thead><tr><th>Mes</th><th class="num">Reservas</th><th class="num">Ingresos</th><th class="num">Egresos</th><th class="num">Comisión BK</th><th class="num">Resultado</th><th class="num">Margen</th></tr></thead>
     <tbody>${lastFiltered.con.map(r=>`<tr>
@@ -809,28 +840,29 @@ function renderCon(){
     <tfoot><tr><td>TOTAL</td><td class="num">${lastFiltered.con.reduce((a,r)=>a+r.reservas,0)}</td>
       <td class="num">${fmt(totI)}</td><td class="num">${fmt(totE)}</td>
       <td class="num">${fmt(lastFiltered.con.reduce((a,r)=>a+r.com,0))}</td>
-      <td class="num">${fmt(totR)}</td><td class="num">${margen.toFixed(1)}%</td></tr></tfoot>
+      <td class="num">${fmt(totR)}</td><td class="num">${margen.toFixed(0)}%</td></tr></tfoot>
   </table>`;
 }
 
 /* ---------- EXPORT ---------- */
 function expCSV(view){
   let head, lines;
+  const R = Math.round;
   if(view==='con'){
     head = ['Mes','Reservas','Ingresos','Egresos','Comision BK','Resultado','Margen'];
-    lines = lastFiltered.con.map(r=>[r.mes,r.reservas,r.ing,r.egr,r.com,r.res,r.margen]);
+    lines = lastFiltered.con.map(r=>[r.mes,r.reservas,R(r.ing),R(r.egr),R(r.com),R(r.res),r.margen]);
   } else if(view==='dep'){
     head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
-    lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,r.ing,r.egr,r.res,r.margen.toFixed(1)]);
+    lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,R(r.ing),R(r.egr),R(r.res),R(r.margen)]);
   } else if(view==='egr'){
     head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe','Moneda'];
-    lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.cptEgr,r.detalle,vEgr(r),r.moneda]);
+    lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.cptEgr,r.detalle,R(vEgr(r)),r.moneda]);
   } else if(view==='bk'){
     head = ['Fecha','Propiedad BK','Depto','Huesped','Ingreso','Comision','Moneda'];
-    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,vIng(r),vCom(r),r.moneda]);
+    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,R(vIng(r)),R(vCom(r)),r.moneda]);
   } else {
-    head = ['Fecha','Depto','Plataforma','Huesped','Noches','Importe','Moneda','Forma de pago','Donde','Debe'];
-    lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.noches,vIng(r),r.moneda,r.formaPago,r.donde,r.debe?'SI':'NO']);
+    head = ['Fecha','Depto','Plataforma','Huesped','In','Out','Noches','Importe','Moneda','TC MEP','Forma de pago','Donde','Debe'];
+    lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.fIn,r.fOut,r.noches,R(vIng(r)),r.moneda,r.tc?R(r.tc):'',r.formaPago,r.donde,r.debe?'SI':'NO']);
   }
   const csv = [head,...lines].map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -844,6 +876,7 @@ function openCfg(){
   document.getElementById('cfgId').value = cfg.id;
   document.getElementById('cfgTab').value = cfg.tab;
   document.getElementById('cfgMep').value = cfg.mep;
+  document.getElementById('cfgPtab').value = cfg.ptab;
   document.getElementById('cfgPw').value = '';
   document.getElementById('cfgBg').classList.add('on');
 }
@@ -852,6 +885,7 @@ function saveCfg(){
   localStorage.setItem('r28_id', document.getElementById('cfgId').value.trim());
   localStorage.setItem('r28_tab', document.getElementById('cfgTab').value.trim() || '$$$');
   localStorage.setItem('r28_mep', document.getElementById('cfgMep').value.trim() || 'cotizacion MEP');
+  localStorage.setItem('r28_ptab', document.getElementById('cfgPtab').value.trim() || DEF.ptab);
   const pw = document.getElementById('cfgPw').value.trim();
   if(pw) localStorage.setItem('r28_pw', pw);
   closeCfg(); loadData();
