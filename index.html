@@ -412,6 +412,10 @@ async function loadData(){
       const fRef = fIngreso || parseFecha(g(r,'Fecha'));
       const mesF = fRef ? fRef.m : mes, anoF = fRef ? fRef.y : ano;
       const mesanoF = (mesF&&anoF) ? mesF+'/'+anoF : mesano;
+      // referencia CHECKOUT (col H) para comisiones BK; fallback a la anterior
+      const fCheckout = parseFecha(g(r,'Fecha de Egreso')) || fRef;
+      const mesH = fCheckout ? fCheckout.m : mesF, anoH = fCheckout ? fCheckout.y : anoF;
+      const mesanoH = (mesH&&anoH) ? mesH+'/'+anoH : mesanoF;
 
       // INGRESOS: col I ('Ingresos carga'), con signo (negativos restan). Moneda: col L.
       // Dolarización de pesos: cotización MEP por fecha (col F, o col A si F vacía).
@@ -436,7 +440,7 @@ async function loadData(){
         SIN_FECHA.push({fecha:g(r,'Fecha'), dep:depName, hue:g(r,'Huésped'), ing, moneda:isUSD?'u$s':'$'});
 
       ROWS.push({
-        fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF, sinF,
+        fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF, mesH, anoH, mesanoH, sinF,
         dep: g(r,'Departamento'), pla: g(r,'Plataforma'),
         cptIng: g(r,'Concepto Ingresos'),
         hue: g(r,'Huésped'), noches: pn(g(r,'Noches')),
@@ -521,7 +525,7 @@ function buildFilters(){
   const anos = ROWS.map(r=>r.ano).filter(Boolean);
   const meses = ROWS.map(r=>r.mes).filter(Boolean);
   const curY = Math.max(...anos, 0);
-  const depsAll = [...new Set([...ING.map(r=>r.dep), ...EGR.map(r=>r.dep)])];
+  const depsAll = [...new Set(ING.map(r=>r.dep))]; // solo deptos activos, igual que Ingresos
   makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep');
   makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla');
   makeMS('ms-ing-ano', anos, 'ano', false, [curY]);
@@ -534,8 +538,8 @@ function buildFilters(){
   makeMS('ms-dep-ano', anos, 'ano', false, [curY]);
   makeMS('ms-dep-mes', meses, 'mes');
   makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro');
-  makeMS('ms-bk-ano', anos, 'ano', false, [curY]);
-  makeMS('ms-bk-mes', meses, 'mes');
+  makeMS('ms-bk-ano', BK.map(r=>r.anoH).filter(Boolean), 'ano', false, [curY]);
+  makeMS('ms-bk-mes', BK.map(r=>r.mesH).filter(Boolean), 'mes');
   const anosF = ROWS.map(r=>r.anoF).filter(Boolean);
   makeMS('ms-con-ano', anosF, 'ano', false, [Math.max(...anosF,0)]);
   // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
@@ -585,7 +589,7 @@ function mkChart(id, type, labels, datasets, opts={}){
 }
 const PALETTE = ['#CC1414','#d4af37','#2e86de','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e84393','#f1c40f','#54a0ff','#ff6b6b','#10ac84'];
 
-const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fecha',asc:false}, dep:{key:'res',asc:false} };
+const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fOut',asc:false}, dep:{key:'res',asc:false} };
 function sortTable(view, key){
   const s = sortState[view];
   if(s.key===key) s.asc=!s.asc; else { s.key=key; s.asc=false; }
@@ -593,7 +597,7 @@ function sortTable(view, key){
 }
 function cmp(a,b,key,asc){
   let x=a[key], y=b[key];
-  if(key==='fecha'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
+  if(key==='fecha'||key==='fIn'||key==='fOut'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
   if(typeof x==='string'){ x=x.toLowerCase(); y=String(y).toLowerCase(); }
   return (x<y?-1:x>y?1:0)*(asc?1:-1);
 }
@@ -758,41 +762,35 @@ function renderDep(){
   </table>`;
 }
 
-/* ---------- BOOKING ---------- */
+/* ---------- BOOKING (todo en PESOS · col K · fecha = checkout col H) ---------- */
 function renderBk(){
   const pro=msGet('ms-bk-pro'), ano=msGet('ms-bk-ano'), mes=msGet('ms-bk-mes');
-  let rows = BK.filter(r=>pro.has(r.propBK||'(sin propiedad)')&&ano.has(r.ano)&&mes.has(r.mes));
-  const tot = rows.reduce((a,r)=>a+vCom(r),0);
-  const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+vCom(r));
+  let rows = BK.filter(r=>pro.has(r.propBK||'(sin propiedad)')&&ano.has(r.anoH)&&mes.has(r.mesH));
+  const tot = rows.reduce((a,r)=>a+r.comA,0);
+  const byPro={}; rows.forEach(r=>byPro[r.propBK||'(sin propiedad)']=(byPro[r.propBK||'(sin propiedad)']||0)+r.comA);
   const proE = Object.entries(byPro).sort((a,b)=>b[1]-a[1]);
-  const totA = rows.reduce((a,r)=>a+r.comA,0);
-  const totU = rows.reduce((a,r)=>a+r.comU,0);
   document.getElementById('k-bk').innerHTML = `
-    <div class="kpi"><div class="t">Comisión BK en pesos (col K→$)</div><div class="v red">$ ${fmt(totA)}</div></div>
-    <div class="kpi"><div class="t">Comisión BK en u$s</div><div class="v gold">u$s ${fmt(totU)}</div></div>
-    <div class="kpi"><div class="t">Reservas con comisión</div><div class="v">${rows.length}</div></div>
+    <div class="kpi"><div class="t">Ingresos Booking en pesos (col K)</div><div class="v red">$ ${fmt(tot)}</div></div>
+    <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div></div>
     <div class="kpi"><div class="t">Propiedades</div><div class="v">${proE.length}</div></div>
-    <div class="kpi"><div class="t">Promedio por reserva</div><div class="v">${fmtM(rows.length?tot/rows.length:0)}</div></div>`;
-  mkChart('ch-bk-pro','bar',proE.map(e=>e[0]),[{label:'Comisión',data:proE.map(e=>e[1]),backgroundColor:'#2e86de',borderRadius:6}]);
-  const byMes={}; rows.forEach(r=>{byMes[r.mesano]=(byMes[r.mesano]||0)+vCom(r);});
+    <div class="kpi"><div class="t">Promedio por reserva</div><div class="v">$ ${fmt(rows.length?tot/rows.length:0)}</div></div>`;
+  mkChart('ch-bk-pro','bar',proE.map(e=>e[0]),[{label:'$',data:proE.map(e=>e[1]),backgroundColor:'#2e86de',borderRadius:6}]);
+  const byMes={}; rows.forEach(r=>{byMes[r.mesanoH]=(byMes[r.mesanoH]||0)+r.comA;});
   const mesE = Object.entries(byMes).sort((a,b)=>spMesAno(a[0],b[0]));
-  mkChart('ch-bk-mes','bar',mesE.map(e=>{const [m,y]=e[0].split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)}),[{label:'Comisión',data:mesE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  mkChart('ch-bk-mes','bar',mesE.map(e=>{const [m,y]=e[0].split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)}),[{label:'$',data:mesE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
   const s=sortState.bk; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.bk = rows;
-  document.getElementById('t-bk-n').textContent = `Detalle comisiones Booking (${rows.length})`;
+  document.getElementById('t-bk-n').textContent = `Detalle comisiones Booking (${rows.length}) · todo en AR$`;
   document.getElementById('t-bk').innerHTML = `<table>
     <thead><tr>
-      <th onclick="sortTable('bk','fecha')">Fecha</th><th onclick="sortTable('bk','propBK')">Propiedad BK</th>
+      <th onclick="sortTable('bk','fOut')">Fecha (checkout col H)</th><th onclick="sortTable('bk','propBK')">Propiedad BK</th>
       <th onclick="sortTable('bk','dep')">Depto</th><th onclick="sortTable('bk','hue')">Huésped</th>
-      <th class="num" onclick="sortTable('bk','ingU')">Ingreso</th>
-      <th class="num" onclick="sortTable('bk','com')">Comisión</th><th>Moneda orig.</th>
+      <th class="num" onclick="sortTable('bk','comA')">Ingreso (col K)</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
-      <td>${r.fecha}</td><td><b>${r.propBK}</b></td><td>${r.dep}</td><td>${r.hue}</td>
-      <td class="num">${fmt(vIng(r))}</td>
-      <td class="num"><b>${fmt(vCom(r))}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
+      <td>${r.fOut||r.fecha}</td><td><b>${r.propBK}</b></td><td>${r.dep}</td><td>${r.hue}</td>
+      <td class="num"><b>${fmt(r.comA)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">$ ${fmt(tot)}</td></tr></tfoot>
   </table>`;
 }
 
@@ -858,8 +856,8 @@ function expCSV(view){
     head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe','Moneda'];
     lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.cptEgr,r.detalle,R(vEgr(r)),r.moneda]);
   } else if(view==='bk'){
-    head = ['Fecha','Propiedad BK','Depto','Huesped','Ingreso','Comision','Moneda'];
-    lines = lastFiltered.bk.map(r=>[r.fecha,r.propBK,r.dep,r.hue,R(vIng(r)),R(vCom(r)),r.moneda]);
+    head = ['Fecha checkout','Propiedad BK','Depto','Huesped','Ingreso $ (col K)'];
+    lines = lastFiltered.bk.map(r=>[r.fOut||r.fecha,r.propBK,r.dep,r.hue,R(r.comA)]);
   } else {
     head = ['Fecha','Depto','Plataforma','Huesped','In','Out','Noches','Importe','Moneda','TC MEP','Forma de pago','Donde','Debe'];
     lines = lastFiltered.ing.map(r=>[r.fecha,r.dep,r.pla,r.hue,r.fIn,r.fOut,r.noches,R(vIng(r)),r.moneda,r.tc?R(r.tc):'',r.formaPago,r.donde,r.debe?'SI':'NO']);
