@@ -121,10 +121,10 @@ th.num{text-align:right}
   <nav>
     <button class="on" data-v="ing" onclick="setView('ing')">📈 Ingresos</button>
     <button data-v="egr" onclick="setView('egr')">📉 Egresos</button>
+    <button data-v="rec" onclick="setView('rec')">🛠 Resultado</button>
     <button data-v="dep" onclick="setView('dep')">🏢 Por Depto</button>
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
-    <button data-v="rec" onclick="setView('rec')">🛠 Resultado</button>
   </nav>
   <span id="upd"></span>
   <div id="curTgl">
@@ -340,6 +340,8 @@ let SIN_FECHA = []; // ingresos sin fecha de ingreso (col F vacía)
 let ACTIVOS = new Set(); // deptos activos (solapa Departamento-Propietario-Edificio, col E='Activo')
 let EDIF = new Set();    // nombres de edificios (col F de esa solapa + fijos), en minúsculas
 let EDIF_COUNT = {};     // edificio (min.) -> cantidad de deptos (cols AE/AF de $$$)
+let EDIF_COUNT_MES = {}; // 'edificio|mes/ano' -> cantidad (si varía mes a mes)
+let MIEMBROS = {};       // edificio (min.) -> [deptos activos que lo integran]
 function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
 function mepRate(f){
   if(!MEP.length) return 0;
@@ -387,9 +389,16 @@ async function loadData(){
       for(const r of rawP){
         const d = (r[0]||'').trim();
         const est = (r[4]||'').trim().toLowerCase();
-        if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIF.has(d.toLowerCase())) ACTIVOS.add(d);
+        if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIF.has(d.toLowerCase()) && !/reclamo/i.test(d)) ACTIVOS.add(d);
       }
     }
+    // deptos que integran cada edificio (Monta: lista definida por Dana; resto por prefijo)
+    MIEMBROS = {
+      monta: ['0PB','1A','1C','2A','2D','4B','5D','6A','6B','8B','9A'].filter(d=>ACTIVOS.has(d)),
+      italiano: [...ACTIVOS].filter(d=>/^IT\d/i.test(d)),
+      fleni: [...ACTIVOS].filter(d=>/^F\d/.test(d)),
+      caballito: [...ACTIVOS].filter(d=>/^C\d/i.test(d)),
+    };
     if(raw.length<2) throw new Error('La pestaña "'+cfg.tab+'" está vacía');
 
     // buscar la fila de encabezados (tiene 'mes/ano' y 'Departamento')
@@ -402,7 +411,7 @@ async function loadData(){
     const ix = {}; H.forEach((h,i)=>{ if(!(h in ix)) ix[h]=i; });
     const g = (r,name)=> (ix[name]!=null && r[ix[name]]!=null) ? String(r[ix[name]]).trim() : '';
 
-    ROWS = []; SIN_FECHA = []; EDIF_COUNT = {};
+    ROWS = []; SIN_FECHA = []; EDIF_COUNT = {}; EDIF_COUNT_MES = {};
     const hIx = (ix['h']!=null) ? ix['h'] : 30; // col AE (nombre edificio) — la col AF (cantidad) es la siguiente
     for(let i=hi+1;i<raw.length;i++){
       const r = raw[i];
@@ -450,9 +459,12 @@ async function loadData(){
       const comU = isUSD ? com : (rate ? com/rate : 0);
       const comA = isUSD ? (rate ? com*rate : 0) : com;
 
-      // mapa edificio -> cantidad de deptos (cols AE/AF), el último valor gana
+      // mapa edificio -> cantidad de deptos (cols AE/AF), global y por mes
       const aeName = (r[hIx]||'').trim(), afCnt = pn(r[hIx+1]);
-      if(aeName && afCnt>0 && !aeName.toLowerCase().includes('edif')) EDIF_COUNT[aeName.toLowerCase()] = afCnt;
+      if(aeName && afCnt>0 && !aeName.toLowerCase().includes('edif')){
+        EDIF_COUNT[aeName.toLowerCase()] = afCnt;
+        if(mesanoF) EDIF_COUNT_MES[aeName.toLowerCase()+'|'+mesanoF] = afCnt;
+      }
 
       const sinF = (ing!==0) && !fIngreso;
       const depName = g(r,'Departamento');
@@ -478,12 +490,30 @@ async function loadData(){
     }
 
     ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep)));
-    const esReclamo = r => /reclamo/i.test(r.dep||'');
-    EGR = ROWS.filter(r=>{
+    const esReclamo = r => /reclamo/i.test((r.dep||r.edificio||''));
+    // egresos reales (solo deptos activos + edificios, sin reclamos)
+    const egrReales = ROWS.filter(r=>{
       if(!(r.egrU!==0||r.egrA!==0) || !r.cptEgr || esReclamo(r)) return false;
       const k = r.dep || r.edificio;
       return !ACTIVOS.size || EDIF.has((k||'').toLowerCase()) || ACTIVOS.has(k);
     });
+    // los gastos de EDIFICIO se reparten: gasto ÷ cantidad (col AF) → una fila por cada depto miembro
+    EGR = [];
+    for(const r of egrReales){
+      const k = (r.dep || r.edificio || ''); const kl = k.toLowerCase();
+      if(EDIF.has(kl)){
+        const mem = MIEMBROS[kl] || [];
+        const cnt = EDIF_COUNT_MES[kl+'|'+r.mesano] || EDIF_COUNT[kl] || mem.length;
+        if(mem.length && cnt){
+          for(const d of mem){
+            EGR.push({...r, dep:d, edificio:k, divisor:cnt,
+              egrOrig:r.egrOrig/cnt, egrU:r.egrU/cnt, egrA:r.egrA/cnt, esParte:true});
+          }
+          continue;
+        }
+      }
+      EGR.push(r);
+    }
     RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
     document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
@@ -694,6 +724,16 @@ function renderIng(){
     <div class="kpi"><div class="t">Cobrado en AR$ (col I)</div><div class="v">$ ${fmt(totARS)}</div></div>
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
     <div class="kpi"><div class="t">Debe / pendiente (no suma)</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
+  // diagnóstico: qué quedó AFUERA del total (para comparar contra Power BI)
+  const fBase = ROWS.filter(r=>r.ing!==0 && ano.has(r.ano) && mes.has(r.mes));
+  const xDebe = fBase.filter(r=>r.debe);
+  const xInact = fBase.filter(r=>!r.debe && r.dep && ACTIVOS.size && !ACTIVOS.has(r.dep) && !/reclamo/i.test(r.dep));
+  const sU = a=>a.filter(r=>r.moneda==='USD').reduce((s,r)=>s+r.ing,0);
+  const sA = a=>a.filter(r=>r.moneda==='ARS').reduce((s,r)=>s+r.ing,0);
+  if(xDebe.length||xInact.length){
+    document.getElementById('k-ing').innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+      🔍 <b>Fuera del total</b> (por si comparás con Power BI): por DEBE → u$s ${fmt(sU(xDebe))} + $ ${fmt(sA(xDebe))} (${xDebe.length} filas) · por deptos inactivos → u$s ${fmt(sU(xInact))} + $ ${fmt(sA(xInact))} (${xInact.length} filas)</div>`;
+  }
   const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
   mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
@@ -749,23 +789,21 @@ function renderEgr(){
   lastFiltered.egr = rows;
   const natA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
   const natU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
-  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X)`;
+  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X) · gastos de edificio ya divididos`;
   document.getElementById('t-egr').innerHTML = `<table>
     <thead><tr>
-      <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto/Edificio</th>
+      <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto</th>
+      <th onclick="sortTable('egr','edificio')">Edificio (origen)</th>
       <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
-      <th class="num" onclick="sortTable('egr','egrOrig')">Importe (col X)</th><th>Moneda</th>
-      <th class="num">÷ Deptos (AF)</th><th class="num">Por depto</th>
+      <th class="num" onclick="sortTable('egr','egrOrig')">Importe</th><th>Moneda</th>
     </tr></thead>
-    <tbody>${rows.map(r=>{
-      const k=(r.dep||r.edificio||''); const nDep = EDIF.has(k.toLowerCase()) ? (EDIF_COUNT[k.toLowerCase()]||0) : 0;
-      return `<tr>
-      <td>${r.fecha}</td><td><b>${k}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td><b>${r.dep||r.edificio}</b></td>
+      <td style="color:var(--muted)">${r.esParte?`${r.edificio} ÷${r.divisor}`:''}</td>
+      <td>${r.cptEgr}</td><td>${r.detalle}</td>
       <td class="num"><b>${fmt(r.egrOrig)}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
-      <td class="num" style="color:var(--muted)">${nDep||''}</td>
-      <td class="num">${nDep?fmt(r.egrOrig/nDep):''}</td></tr>`}).join('')}</tbody>
-    <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">$ ${fmt(natA)} · u$s ${fmt(natU)}</td><td colspan="3"></td></tr></tfoot>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">$ ${fmt(natA)} · u$s ${fmt(natU)}</td><td></td></tr></tfoot>
   </table>`;
 }
 
@@ -920,11 +958,8 @@ function expCSV(view){
     head = ['Fecha','Concepto','Detalle','Importe','Moneda'];
     lines = (lastFiltered.rec||[]).map(r=>[r.fecha,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
   } else if(view==='egr'){
-    head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe (col X)','Moneda','Deptos (AF)','Por depto'];
-    lines = lastFiltered.egr.map(r=>{
-      const k=(r.dep||r.edificio||''); const nDep = EDIF.has(k.toLowerCase()) ? (EDIF_COUNT[k.toLowerCase()]||0) : 0;
-      return [r.fecha,k,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda,nDep||'',nDep?R(r.egrOrig/nDep):''];
-    });
+    head = ['Fecha','Depto','Edificio origen','Concepto','Detalle','Importe','Moneda'];
+    lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.esParte?`${r.edificio} /${r.divisor}`:'',r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
   } else if(view==='bk'){
     head = ['Fecha checkout','Propiedad BK','Depto','Huesped','Ingreso $ (col K)'];
     lines = lastFiltered.bk.map(r=>[r.fOut||r.fecha,r.propBK,r.dep,r.hue,R(r.comA)]);
