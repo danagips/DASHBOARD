@@ -124,6 +124,7 @@ th.num{text-align:right}
     <button data-v="dep" onclick="setView('dep')">🏢 Por Depto</button>
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
+    <button data-v="rec" onclick="setView('rec')">🛠 Resultado</button>
   </nav>
   <span id="upd"></span>
   <div id="curTgl">
@@ -205,6 +206,18 @@ th.num{text-align:right}
     <div class="tblCard">
       <div class="tblHead"><h3 id="t-bk-n">Detalle comisiones Booking</h3><button class="hbtn" onclick="expCSV('bk')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-bk"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-rec">
+    <div class="filters">
+      <div class="f"><label>Año</label><div class="ms" id="ms-rec-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-rec-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-rec"></div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-rec-n">Detalle de reclamos</h3><button class="hbtn" onclick="expCSV('rec')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-rec"></div>
     </div>
   </div>
 
@@ -316,7 +329,7 @@ function spMesAno(a,b){ const [ma,ya]=a.split('/').map(Number), [mb,yb]=b.split(
 
 /* ================= DATA ================= */
 let ROWS = [];
-let ING=[], EGR=[], BK=[];
+let ING=[], EGR=[], BK=[], RECL=[];
 let CUR = localStorage.getItem('r28_cur') || 'USD';
 let charts = {};
 let msState = {};
@@ -325,6 +338,8 @@ let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
 let MEP = [];       // [{s: serial yyyymmdd, rate}] ordenado
 let SIN_FECHA = []; // ingresos sin fecha de ingreso (col F vacía)
 let ACTIVOS = new Set(); // deptos activos (solapa Departamento-Propietario-Edificio, col E='Activo')
+let EDIF = new Set();    // nombres de edificios (col F de esa solapa + fijos), en minúsculas
+let EDIF_COUNT = {};     // edificio (min.) -> cantidad de deptos (cols AE/AF de $$$)
 function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
 function mepRate(f){
   if(!MEP.length) return 0;
@@ -362,17 +377,17 @@ async function loadData(){
     // --- deptos ACTIVOS: solapa 'Departamento - Propietario - Edificio', col A nombre, col E estado ---
     // Los EDIFICIOS (col F de esa solapa + lista fija) se excluyen aunque digan Activo
     ACTIVOS = new Set();
-    const EDIFICIOS = new Set(['monta','italiano','fleni','caballito']);
+    EDIF = new Set(['monta','italiano','fleni','caballito']);
     if(resP.ok){
       const rawP = parseCSV(await resP.text());
       for(const r of rawP){
         const ed = (r[5]||'').trim().toLowerCase();
-        if(ed && !ed.includes('edif')) EDIFICIOS.add(ed);
+        if(ed && !ed.includes('edif')) EDIF.add(ed);
       }
       for(const r of rawP){
         const d = (r[0]||'').trim();
         const est = (r[4]||'').trim().toLowerCase();
-        if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIFICIOS.has(d.toLowerCase())) ACTIVOS.add(d);
+        if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIF.has(d.toLowerCase())) ACTIVOS.add(d);
       }
     }
     if(raw.length<2) throw new Error('La pestaña "'+cfg.tab+'" está vacía');
@@ -387,7 +402,8 @@ async function loadData(){
     const ix = {}; H.forEach((h,i)=>{ if(!(h in ix)) ix[h]=i; });
     const g = (r,name)=> (ix[name]!=null && r[ix[name]]!=null) ? String(r[ix[name]]).trim() : '';
 
-    ROWS = []; SIN_FECHA = [];
+    ROWS = []; SIN_FECHA = []; EDIF_COUNT = {};
+    const hIx = (ix['h']!=null) ? ix['h'] : 30; // col AE (nombre edificio) — la col AF (cantidad) es la siguiente
     for(let i=hi+1;i<raw.length;i++){
       const r = raw[i];
       if(!r || r.every(c=>!String(c).trim())) continue;
@@ -434,6 +450,10 @@ async function loadData(){
       const comU = isUSD ? com : (rate ? com/rate : 0);
       const comA = isUSD ? (rate ? com*rate : 0) : com;
 
+      // mapa edificio -> cantidad de deptos (cols AE/AF), el último valor gana
+      const aeName = (r[hIx]||'').trim(), afCnt = pn(r[hIx+1]);
+      if(aeName && afCnt>0 && !aeName.toLowerCase().includes('edif')) EDIF_COUNT[aeName.toLowerCase()] = afCnt;
+
       const sinF = (ing!==0) && !fIngreso;
       const depName = g(r,'Departamento');
       if(sinF && anoF>=2026 && (!ACTIVOS.size || ACTIVOS.has(depName)))
@@ -452,13 +472,19 @@ async function loadData(){
         edificio: g(r,'Edificio'),
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
-        ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), com, comU, comA,
+        ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), egrOrig: Math.abs(egrRaw), com, comU, comA,
         tc: (!isUSD && ing!==0) ? rate : 0,
       });
     }
 
     ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep)));
-    EGR = ROWS.filter(r=>(r.egrU!==0||r.egrA!==0) && r.cptEgr);
+    const esReclamo = r => /reclamo/i.test(r.dep||'');
+    EGR = ROWS.filter(r=>{
+      if(!(r.egrU!==0||r.egrA!==0) || !r.cptEgr || esReclamo(r)) return false;
+      const k = r.dep || r.edificio;
+      return !ACTIVOS.size || EDIF.has((k||'').toLowerCase()) || ACTIVOS.has(k);
+    });
+    RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
     document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     st.style.display='none';
@@ -540,6 +566,8 @@ function buildFilters(){
   makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro');
   makeMS('ms-bk-ano', BK.map(r=>r.anoH).filter(Boolean), 'ano', false, [curY]);
   makeMS('ms-bk-mes', BK.map(r=>r.mesH).filter(Boolean), 'mes');
+  makeMS('ms-rec-ano', RECL.map(r=>r.ano).filter(Boolean), 'ano', false, [curY]);
+  makeMS('ms-rec-mes', RECL.map(r=>r.mes).filter(Boolean), 'mes');
   const anosF = ROWS.map(r=>r.anoF).filter(Boolean);
   makeMS('ms-con-ano', anosF, 'ano', false, [Math.max(...anosF,0)]);
   // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
@@ -589,7 +617,7 @@ function mkChart(id, type, labels, datasets, opts={}){
 }
 const PALETTE = ['#CC1414','#d4af37','#2e86de','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e84393','#f1c40f','#54a0ff','#ff6b6b','#10ac84'];
 
-const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fOut',asc:false}, dep:{key:'res',asc:false} };
+const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fOut',asc:false}, dep:{key:'res',asc:false}, rec:{key:'fecha',asc:false} };
 function sortTable(view, key){
   const s = sortState[view];
   if(s.key===key) s.asc=!s.asc; else { s.key=key; s.asc=false; }
@@ -608,7 +636,36 @@ function render(){
   else if(currentView==='egr') renderEgr();
   else if(currentView==='dep') renderDep();
   else if(currentView==='bk') renderBk();
+  else if(currentView==='rec') renderRec();
   else renderCon();
+}
+
+/* ---------- RESULTADO (Reclamos) ---------- */
+function renderRec(){
+  const ano=msGet('ms-rec-ano'), mes=msGet('ms-rec-mes');
+  let rows = RECL.filter(r=>ano.has(r.ano)&&mes.has(r.mes));
+  const totA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
+  const totU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
+  document.getElementById('k-rec').innerHTML = `
+    <div class="kpi"><div class="t">Reclamos en AR$</div><div class="v red">$ ${fmt(totA)}</div></div>
+    <div class="kpi"><div class="t">Reclamos en u$s</div><div class="v gold">u$s ${fmt(totU)}</div></div>
+    <div class="kpi"><div class="t">Movimientos</div><div class="v">${rows.length}</div></div>`;
+  const s=sortState.rec; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+  lastFiltered.rec = rows;
+  document.getElementById('t-rec-n').textContent = `Detalle de reclamos (${rows.length})`;
+  document.getElementById('t-rec').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('rec','fecha')">Fecha</th>
+      <th onclick="sortTable('rec','cptEgr')">Concepto</th>
+      <th onclick="sortTable('rec','detalle')">Detalle</th>
+      <th class="num" onclick="sortTable('rec','egrOrig')">Importe (col X)</th><th>Moneda</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td>${r.cptEgr}</td><td>${r.detalle}</td>
+      <td class="num"><b>${fmt(r.egrOrig)}</b></td>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">TOTAL (${rows.length})</td><td class="num">$ ${fmt(totA)} · u$s ${fmt(totU)}</td><td></td></tr></tfoot>
+  </table>`;
 }
 
 /* ---------- INGRESOS ---------- */
@@ -690,18 +747,25 @@ function renderEgr(){
   mkChart('ch-egr-edi','bar',ediE.map(e=>e[0]),[{label:'Egresos',data:ediE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
   const s=sortState.egr; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.egr = rows;
-  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length})`;
+  const natA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
+  const natU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
+  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X)`;
   document.getElementById('t-egr').innerHTML = `<table>
     <thead><tr>
       <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto/Edificio</th>
       <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
-      <th class="num" onclick="sortTable('egr','egrU')">Importe</th><th>Moneda orig.</th>
+      <th class="num" onclick="sortTable('egr','egrOrig')">Importe (col X)</th><th>Moneda</th>
+      <th class="num">÷ Deptos (AF)</th><th class="num">Por depto</th>
     </tr></thead>
-    <tbody>${rows.map(r=>`<tr>
-      <td>${r.fecha}</td><td><b>${r.dep||r.edificio}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
-      <td class="num"><b>${fmt(vEgr(r))}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">${fmt(tot)}</td><td></td></tr></tfoot>
+    <tbody>${rows.map(r=>{
+      const k=(r.dep||r.edificio||''); const nDep = EDIF.has(k.toLowerCase()) ? (EDIF_COUNT[k.toLowerCase()]||0) : 0;
+      return `<tr>
+      <td>${r.fecha}</td><td><b>${k}</b></td><td>${r.cptEgr}</td><td>${r.detalle}</td>
+      <td class="num"><b>${fmt(r.egrOrig)}</b></td>
+      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
+      <td class="num" style="color:var(--muted)">${nDep||''}</td>
+      <td class="num">${nDep?fmt(r.egrOrig/nDep):''}</td></tr>`}).join('')}</tbody>
+    <tfoot><tr><td colspan="4">TOTAL (${rows.length})</td><td class="num">$ ${fmt(natA)} · u$s ${fmt(natU)}</td><td colspan="3"></td></tr></tfoot>
   </table>`;
 }
 
@@ -852,9 +916,15 @@ function expCSV(view){
   } else if(view==='dep'){
     head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
     lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,R(r.ing),R(r.egr),R(r.res),R(r.margen)]);
+  } else if(view==='rec'){
+    head = ['Fecha','Concepto','Detalle','Importe','Moneda'];
+    lines = (lastFiltered.rec||[]).map(r=>[r.fecha,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
   } else if(view==='egr'){
-    head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe','Moneda'];
-    lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.cptEgr,r.detalle,R(vEgr(r)),r.moneda]);
+    head = ['Fecha','Depto/Edificio','Concepto','Detalle','Importe (col X)','Moneda','Deptos (AF)','Por depto'];
+    lines = lastFiltered.egr.map(r=>{
+      const k=(r.dep||r.edificio||''); const nDep = EDIF.has(k.toLowerCase()) ? (EDIF_COUNT[k.toLowerCase()]||0) : 0;
+      return [r.fecha,k,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda,nDep||'',nDep?R(r.egrOrig/nDep):''];
+    });
   } else if(view==='bk'){
     head = ['Fecha checkout','Propiedad BK','Depto','Huesped','Ingreso $ (col K)'];
     lines = lastFiltered.bk.map(r=>[r.fOut||r.fecha,r.propBK,r.dep,r.hue,R(r.comA)]);
