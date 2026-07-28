@@ -352,8 +352,13 @@ function mepRate(f){
 }
 async function loadData(){
   const st = document.getElementById('status');
-  st.style.display='block'; st.textContent='Cargando datos del Sheet…';
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  const prev = {R:ROWS, I:ING, E:EGR, B:BK, RC:RECL, SF:SIN_FECHA};
+  if(!ROWS.length){
+    st.style.display='block'; st.textContent='Cargando datos del Sheet…';
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  } else {
+    document.getElementById('upd').textContent = '⏳ Actualizando…';
+  }
   try{
     const base = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&t=${Date.now()}&sheet=`;
     const [res, resM, resP] = await Promise.all([
@@ -517,12 +522,25 @@ async function loadData(){
     }
     RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
+
+    // guardia anti datos incompletos: si llegó mucho menos que la última vez, no pisar nada
+    const expected = pn(localStorage.getItem('r28_rows')||'0');
+    if(expected>100 && ROWS.length < expected/2) throw new Error('El Sheet devolvió datos incompletos ('+ROWS.length+' filas de ~'+expected+')');
+    localStorage.setItem('r28_rows', String(ROWS.length));
     document.getElementById('upd').textContent = ROWS.length+' filas · '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     st.style.display='none';
     buildFilters();
     setView(currentView);
   }catch(e){
-    st.innerHTML = '⚠ No se pudieron cargar los datos.<br><span style="font-size:12px">'+e.message+' — Verificá en ⚙ que el nombre de la pestaña sea exacto y que el Sheet esté compartido como "cualquiera con el enlace".</span>';
+    if(prev.R.length){
+      // hubo un problema al actualizar: conservar los datos completos anteriores
+      ROWS=prev.R; ING=prev.I; EGR=prev.E; BK=prev.B; RECL=prev.RC; SIN_FECHA=prev.SF;
+      st.style.display='none';
+      document.getElementById('upd').textContent = '⚠ No se pudo actualizar ('+e.message+') — mostrando los datos anteriores. Probá ↻ de nuevo.';
+      setView(currentView);
+    } else {
+      st.innerHTML = '⚠ No se pudieron cargar los datos.<br><span style="font-size:12px">'+e.message+' — Verificá en ⚙ que el nombre de la pestaña sea exacto y que el Sheet esté compartido como "cualquiera con el enlace". Probá ↻ Actualizar de nuevo.</span>';
+    }
   }
 }
 
@@ -579,34 +597,42 @@ function msGet(id){ return msState[id] ? msState[id].sel : new Set(); }
 document.addEventListener('click',e=>{ if(!e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 
 function buildFilters(){
-  const anos = ROWS.map(r=>r.ano).filter(Boolean);
-  const meses = ROWS.map(r=>r.mes).filter(Boolean);
-  const curY = Math.max(...anos, 0);
-  const depsAll = [...new Set(ING.map(r=>r.dep))]; // solo deptos activos, igual que Ingresos
-  makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep');
-  makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla');
-  makeMS('ms-ing-ano', anos, 'ano', false, [curY]);
-  makeMS('ms-ing-mes', meses, 'mes');
-  makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi');
-  makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt');
-  makeMS('ms-egr-ano', anos, 'ano', false, [curY]);
-  makeMS('ms-egr-mes', meses, 'mes');
-  makeMS('ms-dep-dep', depsAll, 'dep');
-  makeMS('ms-dep-ano', anos, 'ano', false, [curY]);
-  makeMS('ms-dep-mes', meses, 'mes');
-  makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro');
-  makeMS('ms-bk-ano', BK.map(r=>r.anoH).filter(Boolean), 'ano', false, [curY]);
-  makeMS('ms-bk-mes', BK.map(r=>r.mesH).filter(Boolean), 'mes');
-  makeMS('ms-rec-ano', RECL.map(r=>r.ano).filter(Boolean), 'ano', false, [curY]);
-  makeMS('ms-rec-mes', RECL.map(r=>r.mes).filter(Boolean), 'mes');
-  const anosF = ROWS.map(r=>r.anoF).filter(Boolean);
-  makeMS('ms-con-ano', anosF, 'ano', false, [Math.max(...anosF,0)]);
+  // conserva la selección previa; si estaba "todos", sigue "todos" aunque haya valores nuevos
+  const prevAll = id => { const s=msState[id]; if(!s) return null; return s.sel.size===s.vals.length ? null : [...s.sel]; };
+  const prevY   = id => { const s=msState[id]; return s ? [...s.sel] : null; };
+  const M12 = [1,2,3,4,5,6,7,8,9,10,11,12]; // meses SIEMPRE completos
+  // años estables: los del Sheet + los ya vistos antes (guardados), así nunca "desaparecen"
+  let anosAll = [...new Set([
+    ...ROWS.map(r=>r.ano), ...ROWS.map(r=>r.anoF), ...ROWS.map(r=>r.anoH),
+    ...JSON.parse(localStorage.getItem('r28_anos')||'[]')
+  ].filter(y=>y>=2020 && y<=2100))].sort();
+  localStorage.setItem('r28_anos', JSON.stringify(anosAll));
+  const curY = Math.max(...anosAll, 0);
+  const depsAll = [...new Set(ING.map(r=>r.dep))];
+  makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep', true, prevAll('ms-ing-dep'));
+  makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla', true, prevAll('ms-ing-pla'));
+  makeMS('ms-ing-ano', anosAll, 'ano', false, prevY('ms-ing-ano')||[curY]);
+  makeMS('ms-ing-mes', M12, 'mes', true, prevAll('ms-ing-mes'));
+  makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi', true, prevAll('ms-egr-edi'));
+  makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
+  makeMS('ms-egr-ano', anosAll, 'ano', false, prevY('ms-egr-ano')||[curY]);
+  makeMS('ms-egr-mes', M12, 'mes', true, prevAll('ms-egr-mes'));
+  makeMS('ms-dep-dep', depsAll, 'dep', true, prevAll('ms-dep-dep'));
+  makeMS('ms-dep-ano', anosAll, 'ano', false, prevY('ms-dep-ano')||[curY]);
+  makeMS('ms-dep-mes', M12, 'mes', true, prevAll('ms-dep-mes'));
+  makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro', true, prevAll('ms-bk-pro'));
+  makeMS('ms-bk-ano', anosAll, 'ano', false, prevY('ms-bk-ano')||[curY]);
+  makeMS('ms-bk-mes', M12, 'mes', true, prevAll('ms-bk-mes'));
+  makeMS('ms-rec-ano', anosAll, 'ano', false, prevY('ms-rec-ano')||[curY]);
+  makeMS('ms-rec-mes', M12, 'mes', true, prevAll('ms-rec-mes'));
+  makeMS('ms-con-ano', anosAll, 'ano', false, prevY('ms-con-ano')||[curY]);
   // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
   const pers = [...new Set(ROWS.map(r=>r.mesanoF).filter(Boolean))].sort(spMesAno);
   const sel = document.getElementById('sel-con-per');
+  const prevPer = sel.value;
   sel.innerHTML = '<option value="all">Todos los meses</option>' +
     pers.map(p=>{const [m,y]=p.split('/');return `<option value="${p}">${MESES[+m]} ${y}</option>`}).join('');
-  sel.value = 'all';
+  sel.value = (prevPer && (prevPer==='all' || pers.includes(prevPer))) ? prevPer : 'all';
 }
 
 /* ================= VIEWS ================= */
