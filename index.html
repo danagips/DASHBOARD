@@ -489,7 +489,8 @@ async function loadData(){
       });
     }
 
-    ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep)));
+    // Reclamos SÍ suma en Ingresos (igual que el Power BI); sus egresos van a la solapa Resultado
+    ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep) || /reclamo/i.test(r.dep)));
     const esReclamo = r => /reclamo/i.test((r.dep||r.edificio||''));
     // egresos reales (solo deptos activos + edificios, sin reclamos)
     const egrReales = ROWS.filter(r=>{
@@ -731,8 +732,14 @@ function renderIng(){
   const sU = a=>a.filter(r=>r.moneda==='USD').reduce((s,r)=>s+r.ing,0);
   const sA = a=>a.filter(r=>r.moneda==='ARS').reduce((s,r)=>s+r.ing,0);
   if(xDebe.length||xInact.length){
+    const det = a => a.map(r=>`${r.fecha} · <b>${r.dep}</b> · ${r.hue||'(sin huésped)'} · ${r.moneda==='USD'?'u$s':'$'} ${fmt(r.ing)}`).join('<br>');
     document.getElementById('k-ing').innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
-      🔍 <b>Fuera del total</b> (por si comparás con Power BI): por DEBE → u$s ${fmt(sU(xDebe))} + $ ${fmt(sA(xDebe))} (${xDebe.length} filas) · por deptos inactivos → u$s ${fmt(sU(xInact))} + $ ${fmt(sA(xInact))} (${xInact.length} filas)</div>`;
+      🔍 <b>Fuera del total</b> (por si comparás con Power BI): por DEBE → u$s ${fmt(sU(xDebe))} + $ ${fmt(sA(xDebe))} (${xDebe.length} filas) · por deptos inactivos → u$s ${fmt(sU(xInact))} + $ ${fmt(sA(xInact))} (${xInact.length} filas)
+      <a href="#" onclick="document.getElementById('exclDet').style.display='block';return false" style="color:var(--gold)"> Ver detalle</a>
+      <div id="exclDet" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto">
+        ${xDebe.length?'<b style="color:var(--neg)">DEBE:</b><br>'+det(xDebe)+'<br>':''}
+        ${xInact.length?'<b style="color:var(--gold)">Deptos inactivos:</b><br>'+det(xInact):''}
+      </div></div>`;
   }
   const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
