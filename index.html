@@ -451,8 +451,12 @@ async function loadData(){
       // Dolarización de pesos: cotización MEP por fecha (col F, o col A si F vacía).
       const ing  = pn(g(r,'Ingresos carga'));
       const rate = mepRate(fRef);
-      const ingU = isUSD ? ing : (rate ? ing/rate : 0);
-      const ingA = isUSD ? (rate ? ing*rate : 0) : ing;
+      // conversión: primero la del propio Excel (col AG / AJ, la misma que suma el PBI);
+      // si está vacía, se usa la cotización MEP por fecha
+      const agU = pn(g(r,'Ingresos $ a u$'));
+      const ajA = pn(g(r,'Ingresos u$ a $'));
+      const ingU = isUSD ? ing : (agU || (rate ? ing/rate : 0));
+      const ingA = isUSD ? (ajA || (rate ? ing*rate : 0)) : ing;
 
       // EGRESOS (col X, en valor absoluto) — conversión con las columnas del Excel o MEP
       const egrRaw = pn(g(r,'Egresos'));
@@ -490,7 +494,7 @@ async function loadData(){
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
         ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), egrOrig: Math.abs(egrRaw), com, comU, comA,
-        tc: (!isUSD && ing!==0) ? rate : 0,
+        tc: (!isUSD && ing!==0) ? (agU ? Math.abs(ing/agU) : rate) : 0,
       });
     }
 
