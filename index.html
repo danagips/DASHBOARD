@@ -568,7 +568,12 @@ async function loadData(){
     RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
     // Airbnb: reservas por plataforma (col C) que aún no se acreditaron (col Q vacía)
-    ABNB = ROWS.filter(r=>/airbnb/i.test(r.pla) && r.ing!==0 && !r.ok);
+    // desde el 01/07/2026 en adelante (según fecha de liberación col P, o check-in col F)
+    ABNB = ROWS.filter(r=>{
+      if(!/airbnb/i.test(r.pla) || r.ing===0 || r.ok) return false;
+      const f = parseFecha(r.lib) || parseFecha(r.fIn) || parseFecha(r.fecha);
+      return f && serial(f) >= 20260701;
+    });
 
     // guardia anti datos incompletos: si llegó mucho menos que la última vez, no pisar nada
     const expected = pn(localStorage.getItem('r28_rows')||'0');
