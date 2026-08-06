@@ -126,6 +126,7 @@ th.num{text-align:right}
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
     <button data-v="ab" onclick="setView('ab')">🏠 Airbnb</button>
+    <button data-v="cf" onclick="setView('cf')">💼 Comisión F</button>
   </nav>
   <span id="upd"></span>
   <div id="curTgl">
@@ -219,6 +220,19 @@ th.num{text-align:right}
     <div class="tblCard">
       <div class="tblHead"><h3 id="t-ab-n">Pagos de Airbnb pendientes de acreditar</h3><button class="hbtn" onclick="expCSV('ab')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-ab"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-cf">
+    <div class="filters">
+      <div class="f"><label>Año</label><div class="ms" id="ms-cf-ano"></div></div>
+      <div class="f"><label>Mes</label><div class="ms" id="ms-cf-mes"></div></div>
+    </div>
+    <div class="kpis" id="k-cf"></div>
+    <div class="kpis" id="k-cf2"></div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-cf-n">Deptos con ingresos en el período</h3><button class="hbtn" onclick="expCSV('cf')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-cf"></div>
     </div>
   </div>
 
@@ -355,6 +369,9 @@ let EDIF = new Set();    // nombres de edificios (col F de esa solapa + fijos), 
 let EDIF_COUNT = {};     // edificio (min.) -> cantidad de deptos (cols AE/AF de $$$)
 let EDIF_COUNT_MES = {}; // 'edificio|mes/ano' -> cantidad (si varía mes a mes)
 let MIEMBROS = {};       // edificio (min.) -> [deptos activos que lo integran]
+let FDEP = {};           // depto normalizado -> 'dana' | 'brico' | 'rent' (Excel de asignación)
+const FID = '1etJJH1-4TswjWOADca6DngsRIhbWqfmdtcPUhgFP2VM';
+const normDep = s => String(s).replace(/^[-\s]+/,'').replace(/\(.*?\)/g,'').trim().toUpperCase();
 function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
 function mepRate(f){
   if(!MEP.length) return 0;
@@ -374,10 +391,11 @@ async function loadData(){
   }
   try{
     const base = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv&t=${Date.now()}&sheet=`;
-    const [res, resM, resP] = await Promise.all([
+    const [res, resM, resP, resF] = await Promise.all([
       fetch(base+encodeURIComponent(cfg.tab)),
       fetch(base+encodeURIComponent(cfg.mep)),
-      fetch(base+encodeURIComponent(cfg.ptab))
+      fetch(base+encodeURIComponent(cfg.ptab)),
+      fetch(`https://docs.google.com/spreadsheets/d/${FID}/gviz/tq?tqx=out:csv&gid=0&t=${Date.now()}`).catch(()=>null)
     ]);
     if(!res.ok) throw new Error('HTTP '+res.status+' — no se pudo leer la pestaña "'+cfg.tab+'"');
     const text = await res.text();
@@ -408,6 +426,15 @@ async function loadData(){
         const d = (r[0]||'').trim();
         const est = (r[4]||'').trim().toLowerCase();
         if(d && est==='activo' && !d.toLowerCase().includes('depto') && !EDIF.has(d.toLowerCase()) && !/reclamo/i.test(d)) ACTIVOS.add(d);
+      }
+    }
+    // asignación de deptos para Comisión F (Excel aparte: Dana / Brico / Rent)
+    FDEP = {};
+    if(resF && resF.ok){
+      const rawF = parseCSV(await resF.text());
+      for(const r of rawF){
+        const d = normDep(r[0]||''), w = (r[1]||'').trim().toLowerCase();
+        if(d && (w==='dana'||w==='brico'||w==='rent')) FDEP[d] = w;
       }
     }
     // deptos que integran cada edificio (Monta: lista definida por Dana; resto por prefijo)
@@ -648,6 +675,8 @@ function buildFilters(){
   makeMS('ms-con-ano', anosAll, 'ano', false, prevY('ms-con-ano')||[curY]);
   makeMS('ms-ab-don', ABNB.map(r=>r.donde||'(sin cuenta)'), 'don', true, prevAll('ms-ab-don'));
   makeMS('ms-ab-dep', ABNB.map(r=>r.dep||'(sin depto)'), 'dep', true, prevAll('ms-ab-dep'));
+  makeMS('ms-cf-ano', anosAll, 'ano', false, prevY('ms-cf-ano')||[curY]);
+  makeMS('ms-cf-mes', M12, 'mes', false, prevAll('ms-cf-mes')||[new Date().getMonth()+1]);
   // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
   const pers = [...new Set(ROWS.map(r=>r.mesanoF).filter(Boolean))].sort(spMesAno);
   const sel = document.getElementById('sel-con-per');
@@ -717,7 +746,42 @@ function render(){
   else if(currentView==='bk') renderBk();
   else if(currentView==='rec') renderRec();
   else if(currentView==='ab') renderAb();
+  else if(currentView==='cf') renderCf();
   else renderCon();
+}
+
+/* ---------- COMISIÓN F (20% → 20% del 20% → ÷ deptos con ingresos) ---------- */
+function renderCf(){
+  const ano=msGet('ms-cf-ano'), mes=msGet('ms-cf-mes');
+  const rows = ING.filter(r=>!/reclamo/i.test(r.dep)&&ano.has(r.ano)&&mes.has(r.mes));
+  const totU = rows.reduce((a,r)=>a+effIngU(r),0);
+  const p20 = totU*0.2;
+  const fTotal = p20*0.2;
+  const byDep = {}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIngU(r));
+  const deps = Object.keys(byDep).sort();
+  const n = deps.length;
+  const fDep = n ? fTotal/n : 0;
+  const who = d => FDEP[normDep(d)]||'';
+  const dDana = deps.filter(d=>who(d)==='dana');
+  const dBrico = deps.filter(d=>who(d)==='brico');
+  document.getElementById('k-cf').innerHTML = `
+    <div class="kpi"><div class="t">Ingreso en u$s (20% del total)</div><div class="v pos">u$s ${fmt(p20)}</div><div class="s">sobre u$s ${fmt(totU)} de ingresos</div></div>
+    <div class="kpi"><div class="t">F Total (20% del 20%)</div><div class="v gold">u$s ${fmt(fTotal)}</div></div>
+    <div class="kpi"><div class="t">F por departamento</div><div class="v">u$s ${fmt(fDep)}</div><div class="s">${n} deptos con ingresos (check-in col F)</div></div>`;
+  document.getElementById('k-cf2').innerHTML = `
+    <div class="kpi"><div class="t">F Dana</div><div class="v red">u$s ${fmt(fDep*dDana.length)}</div><div class="s">${dDana.length} deptos × u$s ${fmt(fDep)}</div></div>
+    <div class="kpi"><div class="t">F Brico</div><div class="v red">u$s ${fmt(fDep*dBrico.length)}</div><div class="s">${dBrico.length} deptos × u$s ${fmt(fDep)}</div></div>`;
+  lastFiltered.cf = deps.map(d=>({dep:d, per:who(d)||'(sin asignar)', ing:byDep[d], f:fDep}));
+  document.getElementById('t-cf-n').textContent = `Deptos con ingresos en el período (${n})`;
+  document.getElementById('t-cf').innerHTML = `<table>
+    <thead><tr><th>Depto</th><th>Asignado a</th><th class="num">Ingresos u$s</th><th class="num">F</th></tr></thead>
+    <tbody>${lastFiltered.cf.map(x=>`<tr>
+      <td><b>${x.dep}</b></td>
+      <td><span class="pill ${x.per==='dana'?'usd':x.per==='brico'?'ars':''}">${x.per}</span></td>
+      <td class="num">${fmt(x.ing)}</td><td class="num">${fmt(x.f)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td>Dana ${dDana.length} · Brico ${dBrico.length} · Rent ${n-dDana.length-dBrico.length}</td>
+      <td class="num">${fmt(totU)}</td><td class="num">${fmt(fTotal)}</td></tr></tfoot>
+  </table>`;
 }
 
 /* ---------- AIRBNB (pendientes de acreditar · col Q vacía) ---------- */
@@ -1038,6 +1102,9 @@ function expCSV(view){
   } else if(view==='dep'){
     head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
     lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,R(r.ing),R(r.egr),R(r.res),R(r.margen)]);
+  } else if(view==='cf'){
+    head = ['Depto','Asignado a','Ingresos u$s','F'];
+    lines = (lastFiltered.cf||[]).map(x=>[x.dep,x.per,R(x.ing),R(x.f)]);
   } else if(view==='ab'){
     head = ['Cuando se libera','Huesped','Departamento','Ingreso u$s','Donde $'];
     lines = (lastFiltered.ab||[]).map(r=>[r.lib,r.hue,r.dep,R(r.ing),r.donde]);
