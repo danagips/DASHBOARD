@@ -125,6 +125,7 @@ th.num{text-align:right}
     <button data-v="dep" onclick="setView('dep')">🏢 Por Depto</button>
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
+    <button data-v="ab" onclick="setView('ab')">🏠 Airbnb</button>
   </nav>
   <span id="upd"></span>
   <div id="curTgl">
@@ -206,6 +207,18 @@ th.num{text-align:right}
     <div class="tblCard">
       <div class="tblHead"><h3 id="t-bk-n">Detalle comisiones Booking</h3><button class="hbtn" onclick="expCSV('bk')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-bk"></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-ab">
+    <div class="filters">
+      <div class="f"><label>Cuenta (Dónde $)</label><div class="ms" id="ms-ab-don"></div></div>
+      <div class="f"><label>Departamento</label><div class="ms" id="ms-ab-dep"></div></div>
+    </div>
+    <div class="kpis" id="k-ab"></div>
+    <div class="tblCard">
+      <div class="tblHead"><h3 id="t-ab-n">Pagos de Airbnb pendientes de acreditar</h3><button class="hbtn" onclick="expCSV('ab')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-ab"></div>
     </div>
   </div>
 
@@ -329,7 +342,7 @@ function spMesAno(a,b){ const [ma,ya]=a.split('/').map(Number), [mb,yb]=b.split(
 
 /* ================= DATA ================= */
 let ROWS = [];
-let ING=[], EGR=[], BK=[], RECL=[];
+let ING=[], EGR=[], BK=[], RECL=[], ABNB=[];
 let CUR = localStorage.getItem('r28_cur') || 'USD';
 let charts = {};
 let msState = {};
@@ -490,6 +503,7 @@ async function loadData(){
         formaPago: g(r,'Forma de pago'), donde: g(r,'Donde $?'),
         debe: g(r,'Debe (sí/no)').toUpperCase().startsWith('S'),
         propBK: g(r,'Propiedad BK'), propietario: g(r,'Propietario'),
+        lib: g(r,'Cuando se libera?'), ok: g(r,'Se libero?'),
         edificio: g(r,'Edificio'),
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
@@ -526,6 +540,8 @@ async function loadData(){
     }
     RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
+    // Airbnb: reservas por plataforma (col C) que aún no se acreditaron (col Q vacía)
+    ABNB = ROWS.filter(r=>/airbnb/i.test(r.pla) && r.ing!==0 && !r.ok);
 
     // guardia anti datos incompletos: si llegó mucho menos que la última vez, no pisar nada
     const expected = pn(localStorage.getItem('r28_rows')||'0');
@@ -630,6 +646,8 @@ function buildFilters(){
   makeMS('ms-rec-ano', anosAll, 'ano', false, prevY('ms-rec-ano')||[curY]);
   makeMS('ms-rec-mes', M12, 'mes', true, prevAll('ms-rec-mes'));
   makeMS('ms-con-ano', anosAll, 'ano', false, prevY('ms-con-ano')||[curY]);
+  makeMS('ms-ab-don', ABNB.map(r=>r.donde||'(sin cuenta)'), 'don', true, prevAll('ms-ab-don'));
+  makeMS('ms-ab-dep', ABNB.map(r=>r.dep||'(sin depto)'), 'dep', true, prevAll('ms-ab-dep'));
   // desplegable de período mes a mes (referencia: fecha de ingreso, columna F)
   const pers = [...new Set(ROWS.map(r=>r.mesanoF).filter(Boolean))].sort(spMesAno);
   const sel = document.getElementById('sel-con-per');
@@ -678,7 +696,7 @@ function mkChart(id, type, labels, datasets, opts={}){
 }
 const PALETTE = ['#CC1414','#d4af37','#2e86de','#2ecc71','#9b59b6','#e67e22','#1abc9c','#e84393','#f1c40f','#54a0ff','#ff6b6b','#10ac84'];
 
-const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fOut',asc:false}, dep:{key:'res',asc:false}, rec:{key:'fecha',asc:false} };
+const sortState = { ing:{key:'fecha',asc:false}, egr:{key:'fecha',asc:false}, bk:{key:'fOut',asc:false}, dep:{key:'res',asc:false}, rec:{key:'fecha',asc:false}, ab:{key:'lib',asc:true} };
 function sortTable(view, key){
   const s = sortState[view];
   if(s.key===key) s.asc=!s.asc; else { s.key=key; s.asc=false; }
@@ -686,7 +704,7 @@ function sortTable(view, key){
 }
 function cmp(a,b,key,asc){
   let x=a[key], y=b[key];
-  if(key==='fecha'||key==='fIn'||key==='fOut'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
+  if(key==='fecha'||key==='fIn'||key==='fOut'||key==='lib'){ const fa=parseFecha(x),fb=parseFecha(y); x=fa?fa.y*10000+fa.m*100+fa.d:0; y=fb?fb.y*10000+fb.m*100+fb.d:0; }
   if(typeof x==='string'){ x=x.toLowerCase(); y=String(y).toLowerCase(); }
   return (x<y?-1:x>y?1:0)*(asc?1:-1);
 }
@@ -698,7 +716,36 @@ function render(){
   else if(currentView==='dep') renderDep();
   else if(currentView==='bk') renderBk();
   else if(currentView==='rec') renderRec();
+  else if(currentView==='ab') renderAb();
   else renderCon();
+}
+
+/* ---------- AIRBNB (pendientes de acreditar · col Q vacía) ---------- */
+function renderAb(){
+  const don=msGet('ms-ab-don'), dep=msGet('ms-ab-dep');
+  let rows = ABNB.filter(r=>don.has(r.donde||'(sin cuenta)')&&dep.has(r.dep||'(sin depto)'));
+  const tot = rows.reduce((a,r)=>a+r.ing,0);
+  const s=sortState.ab; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+  const prox = [...rows].filter(r=>parseFecha(r.lib)).sort((a,b)=>cmp(a,b,'lib',true))[0];
+  document.getElementById('k-ab').innerHTML = `
+    <div class="kpi"><div class="t">Pendiente de acreditar</div><div class="v gold">u$s ${fmt(tot)}</div></div>
+    <div class="kpi"><div class="t">Reservas pendientes</div><div class="v">${rows.length}</div></div>
+    <div class="kpi"><div class="t">Próxima liberación</div><div class="v" style="font-size:18px">${prox?prox.lib:'—'}</div><div class="s">${prox?prox.hue:''}</div></div>`;
+  lastFiltered.ab = rows;
+  document.getElementById('t-ab-n').textContent = `Pagos de Airbnb pendientes (${rows.length}) · desaparecen al poner LISTO en col Q`;
+  document.getElementById('t-ab').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="sortTable('ab','lib')">Cuando se libera (col P)</th>
+      <th onclick="sortTable('ab','hue')">Huésped</th>
+      <th onclick="sortTable('ab','dep')">Departamento</th>
+      <th class="num" onclick="sortTable('ab','ing')">Ingreso u$s (col I)</th>
+      <th onclick="sortTable('ab','donde')">Dónde $ (col T)</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td><b>${r.lib||'—'}</b></td><td>${r.hue}</td><td>${r.dep}</td>
+      <td class="num"><b>${fmt(r.ing)}</b></td><td>${r.donde}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">TOTAL (${rows.length})</td><td class="num">u$s ${fmt(tot)}</td><td></td></tr></tfoot>
+  </table>`;
 }
 
 /* ---------- RESULTADO (Reclamos) ---------- */
@@ -991,6 +1038,9 @@ function expCSV(view){
   } else if(view==='dep'){
     head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
     lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,R(r.ing),R(r.egr),R(r.res),R(r.margen)]);
+  } else if(view==='ab'){
+    head = ['Cuando se libera','Huesped','Departamento','Ingreso u$s','Donde $'];
+    lines = (lastFiltered.ab||[]).map(r=>[r.lib,r.hue,r.dep,R(r.ing),r.donde]);
   } else if(view==='rec'){
     head = ['Fecha','Concepto','Detalle','Importe','Moneda'];
     lines = (lastFiltered.rec||[]).map(r=>[r.fecha,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
