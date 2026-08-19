@@ -51,6 +51,24 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .ms .msBtn:after{content:"▾";color:var(--muted)}
 .ms .msPanel{display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:60;background:var(--panel2);border:1px solid var(--border);border-radius:10px;min-width:230px;max-height:320px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.5)}
 .ms.open .msPanel{display:block}
+.ms.per{min-width:230px}
+.ms.per .msBtn{padding:11px 13px;font-size:14px}
+.ms.per .msPanel{min-width:280px;max-height:400px}
+.ms.per .perList{max-height:340px;overflow-y:auto;padding:5px 0}
+/* selectores largos a propósito: el tablero ya tiene reglas para "label" y para
+   "input" dentro de los desplegables, y sin esto se las come al árbol de períodos */
+.ms.per .perList .perAno{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;
+  font-weight:700;font-size:14px;color:var(--txt);text-transform:none;letter-spacing:0;margin:0;user-select:none}
+.ms.per .perList .perAno:hover{background:rgba(255,255,255,.06)}
+.ms.per .perList .perAno .arr{width:13px;flex:0 0 13px;font-size:9px;color:var(--muted);text-align:center}
+.ms.per .perList .perAno .txt{flex:1}
+.ms.per .perList label.perMes{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 46px;
+  cursor:pointer;font-size:13px;font-weight:500;color:var(--txt);text-transform:none;letter-spacing:0;
+  margin:0;user-select:none}
+.ms.per .perList label.perMes:hover{background:rgba(255,255,255,.06)}
+.ms.per .perList input[type=checkbox]{width:15px;height:15px;flex:0 0 15px;margin:0;padding:0;
+  accent-color:var(--red);cursor:pointer}
+.ms.per .perMeses{padding:1px 0 7px}
 .msPanel input{width:calc(100% - 16px);margin:8px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--txt);font-family:inherit;font-size:13px}
 .msActions{display:flex;gap:6px;padding:0 8px 6px}
 .msActions button{flex:1;background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px;cursor:pointer;font-size:11px;font-family:inherit}
@@ -144,10 +162,9 @@ th.num{text-align:right}
   <div class="view" id="v-ing">
     <div id="warnF"></div>
     <div class="filters">
+      <div class="f"><label>Período</label><div class="ms per" id="ms-ing-per"></div></div>
       <div class="f"><label>Departamento</label><div class="ms" id="ms-ing-dep"></div></div>
       <div class="f"><label>Plataforma</label><div class="ms" id="ms-ing-pla"></div></div>
-      <div class="f"><label>Año</label><div class="ms" id="ms-ing-ano"></div></div>
-      <div class="f"><label>Mes</label><div class="ms" id="ms-ing-mes"></div></div>
     </div>
     <div class="kpis" id="k-ing"></div>
     <div class="grid2">
@@ -671,6 +688,97 @@ function msToggle(id){
 }
 function msFilter(id,v){ msRender(id,v); }
 function msGet(id){ return msState[id] ? msState[id].sel : new Set(); }
+
+/* ====== PERÍODO: un solo desplegable con los años y, dentro de cada uno, sus meses ====== */
+let perState = {};
+// arbol: { 2026: Set(meses con datos), ... }   ·   selected: array de claves "mes/ano"
+function makePer(id, arbol, selected=null){
+  const el = document.getElementById(id); if(!el) return;
+  const anos = Object.keys(arbol).map(Number).sort((a,b)=>a-b);
+  const todas = [];
+  anos.forEach(a => [...arbol[a]].sort((x,y)=>x-y).forEach(m => todas.push(m+'/'+a)));
+  let sel = selected ? selected.filter(k=>todas.includes(k)) : [];
+  if(!sel.length && anos.length){            // por defecto: el año más reciente, completo
+    const ult = anos[anos.length-1];
+    sel = [...arbol[ult]].map(m=>m+'/'+ult);
+  }
+  const ultAno = anos.length ? anos[anos.length-1] : null;
+  const abiertos = perState[id] ? perState[id].abiertos : new Set(ultAno ? [ultAno] : []);
+  perState[id] = { arbol, anos, todas, sel:new Set(sel), abiertos };
+  el.innerHTML = `<button class="msBtn" onclick="perToggle('${id}')"><span id="${id}-lbl"></span></button>
+    <div class="msPanel">
+      <div class="msActions">
+        <button onclick="perAll('${id}',true)">Todos</button>
+        <button onclick="perAll('${id}',false)">Ninguno</button>
+      </div>
+      <div class="perList" id="${id}-list"></div>
+    </div>`;
+  // el tablero cierra los desplegables cuando se clickea "afuera". Como acá el contenido
+  // se redibuja al tildar, el click quedaba huérfano y el panel se cerraba solo: lo frenamos.
+  el.querySelector('.msPanel').addEventListener('click', e=>e.stopPropagation());
+  perRender(id);
+}
+function perRender(id){
+  const s = perState[id];
+  const html = s.anos.map(a=>{
+    const meses = [...s.arbol[a]].sort((x,y)=>x-y);
+    const marcados = meses.filter(m=>s.sel.has(m+'/'+a)).length;
+    const abierto = s.abiertos.has(a);
+    const filaMeses = abierto ? `<div class="perMeses">` + meses.map(m=>
+        `<label class="perMes"><input type="checkbox" ${s.sel.has(m+'/'+a)?'checked':''} onchange="perChkMes('${id}',${a},${m})"> ${MESES[m]}</label>`
+      ).join('') + `</div>` : '';
+    return `<div><div class="perAno">
+        <span class="arr" onclick="perAbrir('${id}',${a})">${abierto?'▼':'▶'}</span>
+        <input type="checkbox" data-ano="${a}" data-est="${marcados===meses.length?'todo':marcados?'algo':'nada'}"
+               ${marcados===meses.length?'checked':''} onchange="perChkAno('${id}',${a})">
+        <span class="txt" onclick="perAbrir('${id}',${a})">${a}</span>
+      </div>${filaMeses}</div>`;
+  }).join('');
+  document.getElementById(id+'-list').innerHTML = html;
+  // el cuadradito "a medias" del año (como en el Power BI)
+  document.querySelectorAll(`#${id}-list .perAno input[data-est="algo"]`).forEach(c=>c.indeterminate=true);
+  perLbl(id);
+}
+function perLbl(id){
+  const s = perState[id], lbl = document.getElementById(id+'-lbl');
+  const n = s.sel.size;
+  if(n===0){ lbl.textContent='Ninguno'; return; }
+  if(n===s.todas.length){ lbl.textContent='Todos los períodos'; return; }
+  if(n===1){ const [m,a]=[...s.sel][0].split('/'); lbl.textContent = MESES[+m]+' '+a; return; }
+  const anosSel = [...new Set([...s.sel].map(k=>+k.split('/')[1]))];
+  if(anosSel.length===1){
+    const a = anosSel[0];
+    if(n===s.arbol[a].size){ lbl.textContent = 'Todo '+a; return; }
+    lbl.textContent = n+' meses de '+a; return;
+  }
+  lbl.textContent = n+' meses';
+}
+function perAbrir(id, a){
+  const s = perState[id];
+  if(s.abiertos.has(a)) s.abiertos.delete(a); else s.abiertos.add(a);
+  perRender(id);
+}
+function perChkMes(id, a, m){
+  const s = perState[id], k = m+'/'+a;
+  if(s.sel.has(k)) s.sel.delete(k); else s.sel.add(k);
+  perRender(id); render();
+}
+function perChkAno(id, a){
+  const s = perState[id], meses = [...s.arbol[a]];
+  const todos = meses.every(m=>s.sel.has(m+'/'+a));
+  meses.forEach(m => todos ? s.sel.delete(m+'/'+a) : s.sel.add(m+'/'+a));
+  perRender(id); render();
+}
+function perAll(id, on){
+  const s = perState[id];
+  s.sel = on ? new Set(s.todas) : new Set();
+  perRender(id); render();
+}
+function perToggle(id){
+  document.querySelectorAll('.ms.open').forEach(m=>{ if(m.id!==id) m.classList.remove('open'); });
+  document.getElementById(id).classList.toggle('open');
+}
+function perGet(id){ return perState[id] ? perState[id].sel : new Set(); }
 document.addEventListener('click',e=>{ if(!e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 
 function buildFilters(){
@@ -690,8 +798,10 @@ function buildFilters(){
   const depsAll = [...new Set(ING.map(r=>r.dep))];
   makeMS('ms-ing-dep', ING.map(r=>r.dep), 'dep', true, prevAll('ms-ing-dep'));
   makeMS('ms-ing-pla', ING.map(r=>r.pla), 'pla', true, prevAll('ms-ing-pla'));
-  makeMS('ms-ing-ano', anosAll, 'ano', false, prevY('ms-ing-ano')||[curY]);
-  makeMS('ms-ing-mes', M12, 'mes', true, prevAll('ms-ing-mes'));
+  // Período (año ▸ meses) — reemplaza los dos desplegables sueltos de Año y Mes
+  const arbolIng = {};
+  ING.forEach(r=>{ if(r.ano&&r.mes){ (arbolIng[r.ano] = arbolIng[r.ano] || new Set()).add(r.mes); } });
+  makePer('ms-ing-per', arbolIng, perState['ms-ing-per'] ? [...perState['ms-ing-per'].sel] : null);
   makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi', true, prevAll('ms-egr-edi'));
   makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
   makeMS('ms-egr-ano', anosAll, 'ano', false, prevY('ms-egr-ano')||[curY]);
@@ -884,8 +994,9 @@ function renderIng(){
         ${SIN_FECHA.map(x=>`${x.fecha} · ${x.dep} · ${x.hue||'(sin huésped)'} · ${x.moneda} ${fmt(x.ing)}`).join('<br>')}
       </div></div>`;
   } else w.innerHTML='';
-  const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), ano=msGet('ms-ing-ano'), mes=msGet('ms-ing-mes');
-  let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&ano.has(r.ano)&&mes.has(r.mes));
+  const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), per=perGet('ms-ing-per');
+  const enPer = r => per.has(r.mes+'/'+r.ano);
+  let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&enPer(r));
   const totU = rows.reduce((a,r)=>a+effIngU(r),0);
   const tot = rows.reduce((a,r)=>a+effIng(r),0);
   const totUSD = rows.filter(r=>r.moneda==='USD'&&!r.debe).reduce((a,r)=>a+r.ing,0);
@@ -899,7 +1010,7 @@ function renderIng(){
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
     <div class="kpi"><div class="t">Debe / pendiente (no suma)</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
   // diagnóstico: qué quedó AFUERA del total (para comparar contra Power BI)
-  const fBase = ROWS.filter(r=>r.ing!==0 && ano.has(r.ano) && mes.has(r.mes));
+  const fBase = ROWS.filter(r=>r.ing!==0 && enPer(r));
   const xDebe = fBase.filter(r=>r.debe);
   const xInact = fBase.filter(r=>!r.debe && r.dep && ACTIVOS.size && !ACTIVOS.has(r.dep) && !/reclamo/i.test(r.dep));
   const sU = a=>a.filter(r=>r.moneda==='USD').reduce((s,r)=>s+r.ing,0);
