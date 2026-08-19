@@ -119,6 +119,11 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .aviTit:first-child{margin-top:0}
 .aviLin{font-size:13px;padding:4px 0 4px 14px;color:var(--txt)}
 .aviLin span{color:var(--muted)}
+.avi.ok{border-color:rgba(46,204,113,.3)}
+.avi.ok .debVal{color:var(--green);font-size:20px}
+.aviTit.info{color:var(--muted);border-top:1px solid var(--border);padding-top:12px}
+.aviTit.info:first-child{border-top:0;padding-top:0}
+.aviLin.info{color:var(--muted)}
 /* cabecera del gráfico con el par de botones para dar vuelta el orden */
 .chHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
 .chHead h3{margin:0}
@@ -127,6 +132,14 @@ main{padding:22px;max-width:1500px;margin:0 auto}
   font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 .segs button:hover{color:var(--txt)}
 .segs button.on{background:var(--red);color:#fff}
+/* el par + / − del gráfico de departamentos */
+.segs.pm button{width:40px;padding:5px 0;font-size:20px;font-weight:800;line-height:1;text-align:center}
+.segs.pm button.mas{color:var(--green)}
+.segs.pm button.menos{color:var(--neg)}
+.segs.pm button.mas.on{background:var(--green);color:#0b0d11}
+.segs.pm button.menos.on{background:var(--neg);color:#0b0d11}
+.segs.pm button:not(.on){opacity:.5}
+.segs.pm button:not(.on):hover{opacity:1}
 .chNota{font-size:11px;color:var(--muted);margin-top:-2px;margin-bottom:8px}
 /* ---------- CHARTS / TABLES ---------- */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
@@ -214,9 +227,9 @@ th.num{text-align:right}
       <div class="card">
         <div class="chHead">
           <h3 id="h-ing-dep">Ingresos por departamento</h3>
-          <div class="segs">
-            <button id="segTop" class="on" onclick="setOrdenDep('top')">Los que más entran</button>
-            <button id="segBot" onclick="setOrdenDep('bot')">Los que menos entran</button>
+          <div class="segs pm">
+            <button id="segTop" class="mas on" onclick="setOrdenDep('top')" title="Los que más entran">+</button>
+            <button id="segBot" class="menos" onclick="setOrdenDep('bot')" title="Los que menos entran">−</button>
           </div>
         </div>
         <div class="chNota" id="n-ing-dep"></div><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
@@ -1221,17 +1234,20 @@ function renderIng(){
     });
   });
   sinCargar.sort((a,b)=>b.dias-a.dias);
-  const nAvisos = inactL.length + sinCal.length + sinCargar.length;
+  // los que no figuran en el calendario NO son un problema: son deptos que ese mes
+  // no estaban en alquiler (el propietario los usa, obra, etc). Van informativos aparte.
+  const nAvisos = inactL.length + sinCargar.length;
   const calFallo = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='error');
   const calSinAno = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='sin-datos');
-  document.getElementById('k-ing3').innerHTML = (nAvisos||calFallo||calSinAno) ? `
-    <div class="avi" id="aviBox">
+  document.getElementById('k-ing3').innerHTML = (nAvisos||sinCal.length||calFallo||calSinAno) ? `
+    <div class="avi ${nAvisos?'':'ok'}" id="aviBox">
       <div class="debTop" onclick="document.getElementById('aviBox').classList.toggle('on')">
         <div>
           <div class="debTit">Cosas para revisar</div>
-          <div class="debVal">${nAvisos} <small>${nAvisos===1?'aviso':'avisos'}</small></div>
+          <div class="debVal">${nAvisos ? nAvisos+' <small>'+(nAvisos===1?'aviso':'avisos')+'</small>'
+            : 'Ninguna <small>' + (sinCal.length ? 'todo en orden · abajo, lo que estuvo fuera de alquiler' : 'todo en orden') + '</small>'}</div>
         </div>
-        ${nAvisos?'<button class="debVer">Ver el detalle ▾</button>':''}
+        <button class="debVer">Ver el detalle ▾</button>
       </div>
       <div class="debDet">
         ${sinCargar.length?`<div class="aviTit">Se alojó gente pero no hay ningún ingreso cargado (${sinCargar.length})</div>
@@ -1240,8 +1256,10 @@ function renderIng(){
         ${inactL.length?`<div class="aviTit">Marcados como inactivos pero tuvieron ingresos (${inactL.length})</div>
           ${inactL.map(([d,x])=>`<div class="aviLin">• <b>${d}</b> — u$s ${fmt(x.u)} en ${x.n} ${x.n===1?'reserva':'reservas'}
             <span>· esta plata no está sumada en el total</span></div>`).join('')}`:''}
-        ${sinCal.length?`<div class="aviTit">Activos en el Excel pero no figuran en el calendario (${sinCal.length})</div>
-          <div class="aviLin">${sinCal.join(' · ')}</div>`:''}
+        ${sinCal.length?`<div class="aviTit info">Fuera de alquiler este mes (${sinCal.length})</div>
+          <div class="aviLin info">${sinCal.join(' · ')}</div>
+          <div class="aviLin info" style="padding-top:2px"><span>No figuran en el calendario del período: ese mes no estaban en alquiler.
+          Cuando vuelvan a cargarse en el calendario, reaparecen solos.</span></div>`:''}
         ${calSinAno?`<div class="aviLin"><span>El calendario que leo es el de ${CAL_ANO}. Para meses de otros años no puedo hacer estos controles.</span></div>`:''}
         ${calFallo?`<div class="aviLin"><span>No pude leer el calendario de algún mes del período. Los controles que dependen de él quedaron sin hacer.</span></div>`:''}
       </div>
