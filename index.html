@@ -1189,7 +1189,7 @@ function renderIng(){
     <div class="deb ${filasDebe.length?'':'vacio'}" id="debBox">
       <div class="debTop" onclick="document.getElementById('debBox').classList.toggle('on')">
         <div>
-          <div class="debTit">Debe · pendiente de cobro (no suma al total)</div>
+          <div class="debTit">Debe</div>
           <div class="debVal" style="${filasDebe.length?'':'color:var(--muted)'}">u$s ${fmt(debeU)}
             <small>${filasDebe.length} ${filasDebe.length===1?'reserva':'reservas'}</small></div>
         </div>
@@ -1245,7 +1245,7 @@ function renderIng(){
         <div>
           <div class="debTit">Cosas para revisar</div>
           <div class="debVal">${nAvisos ? nAvisos+' <small>'+(nAvisos===1?'aviso':'avisos')+'</small>'
-            : 'Ninguna <small>' + (sinCal.length ? 'todo en orden · abajo, lo que estuvo fuera de alquiler' : 'todo en orden') + '</small>'}</div>
+            : 'Ninguna <small>todo en orden</small>'}</div>
         </div>
         <button class="debVer">Ver el detalle ▾</button>
       </div>
@@ -1281,9 +1281,6 @@ function renderIng(){
   const enCero = Object.values(byDep).filter(v=>v===0).length;
   const ordenados = Object.entries(byDep).sort((a,b)=> ordenDep==='top' ? b[1]-a[1] : a[1]-b[1]);
   const listaDep = ordenados.slice(0,12);
-  document.getElementById('h-ing-dep').textContent = ordenDep==='top'
-    ? 'Ingresos por departamento · los 12 que más entran'
-    : 'Ingresos por departamento · los 12 que menos entran';
   const nota = document.getElementById('n-ing-dep');
   if(nota){
     const p1 = enCero ? `${enCero} ${enCero===1?'departamento se podía alquilar y no tuvo':'departamentos se podían alquilar y no tuvieron'} ningún ingreso` : '';
