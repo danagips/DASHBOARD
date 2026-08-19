@@ -575,9 +575,11 @@ async function loadData(){
     }
 
     // --- deptos ACTIVOS: solapa 'Departamento - Propietario - Edificio', col A nombre, col E estado ---
-    // Los EDIFICIOS (col F de esa solapa + lista fija) se excluyen aunque digan Activo
+    // Los EDIFICIOS (col F de esa solapa + lista fija) se excluyen aunque digan Activo.
+    // Tucumán está cargado como si fuera un depto activo y sin edificio asignado, pero es
+    // un edificio: no tiene ningún ingreso, solo gastos. Va en la lista fija.
     ACTIVOS = new Set();
-    EDIF = new Set(['monta','italiano','fleni','caballito']);
+    EDIF = new Set(['monta','italiano','fleni','caballito','tucuman']);
     if(resP.ok){
       const rawP = parseCSV(await resP.text());
       for(const r of rawP){
@@ -1137,8 +1139,14 @@ function renderIng(){
   // un depto está "fuera de alquiler" si estuvo trabado el mes ENTERO, en todos los
   // meses del período. Si estuvo trabado unos días nomás, cuenta como uno normal.
   const hayCal = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='ok');
-  const fueraDeAlquiler = d => hayCal && mesesPer.length>0
-    && mesesPer.every(([m,a])=>calTrabadoTodoElMes(d,m,a));
+  // Fuera de alquiler = en TODOS los meses del período pasó una de dos cosas: o estuvo
+  // trabado el mes entero, o directamente no figura en el calendario de ese mes (si no
+  // está en la grilla, ese mes no estaba en el circuito de alquiler).
+  const calOk = ([m,a]) => CAL_ESTADO[m+'/'+a]==='ok';
+  const fueraDeAlquiler = d => hayCal && mesesPer.length>0 && mesesPer.every(ma =>
+    calOk(ma) && (calTrabadoTodoElMes(d,ma[0],ma[1]) || !calTieneMes(d,ma[0],ma[1])));
+  const noFiguraEnCal = d => hayCal && mesesPer.length>0 && mesesPer.every(ma =>
+    calOk(ma) && !calTieneMes(d,ma[0],ma[1]));
   const enPer = r => per.has(r.mes+'/'+r.ano);
   let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&enPer(r));
   const totU = rows.reduce((a,r)=>a+effIngU(r),0);
@@ -1261,7 +1269,12 @@ function renderIng(){
   const nota = document.getElementById('n-ing-dep');
   if(nota){
     const p1 = enCero ? `${enCero} ${enCero===1?'departamento se podía alquilar y no tuvo':'departamentos se podían alquilar y no tuvieron'} ningún ingreso` : '';
-    const p2 = trabados.length ? `${trabados.length} ${trabados.length===1?'estuvo fuera de alquiler':'estuvieron fuera de alquiler'} todo el período: ${trabados.sort().join(', ')}` : '';
+    const bloq = trabados.filter(d=>!noFiguraEnCal(d)).sort();
+    const aus  = trabados.filter(d=>noFiguraEnCal(d)).sort();
+    const p2 = [
+      bloq.length ? `${bloq.length} ${bloq.length===1?'estuvo trabado':'estuvieron trabados'} todo el período (${bloq.join(', ')})` : '',
+      aus.length ? `${aus.length} no ${aus.length===1?'figura':'figuran'} en el calendario del período (${aus.join(', ')})` : ''
+    ].filter(Boolean).join(' · ');
     nota.innerHTML = ordenDep==='bot'
       ? [p1, p2 && `<span style="color:var(--gold)">${p2}</span>`].filter(Boolean).join(' · ')
       : '';
