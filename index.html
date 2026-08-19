@@ -110,6 +110,15 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .debDet td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
 .debDet tr:last-child td{border-bottom:none}
 .debNota{font-size:11px;color:var(--muted);margin-top:10px}
+.avi{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid rgba(212,175,55,.35);
+  border-radius:14px;padding:14px 18px;margin-bottom:18px}
+.avi .debVal{color:var(--gold)}
+.avi .debDet{display:none}
+.avi.on .debDet{display:block}
+.aviTit{font-size:13px;font-weight:700;color:var(--gold);margin:12px 0 5px}
+.aviTit:first-child{margin-top:0}
+.aviLin{font-size:13px;padding:4px 0 4px 14px;color:var(--txt)}
+.aviLin span{color:var(--muted)}
 /* cabecera del gráfico con el par de botones para dar vuelta el orden */
 .chHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
 .chHead h3{margin:0}
@@ -200,6 +209,7 @@ th.num{text-align:right}
     </div>
     <div class="kpis" id="k-ing"></div>
     <div id="k-ing2"></div>
+    <div id="k-ing3"></div>
     <div class="grid2">
       <div class="card">
         <div class="chHead">
@@ -444,6 +454,82 @@ let MIEMBROS = {};       // edificio (min.) -> [deptos activos que lo integran]
 let FDEP = {};           // depto normalizado -> 'dana' | 'brico' | 'rent' (Excel de asignación)
 const FID = '1etJJH1-4TswjWOADca6DngsRIhbWqfmdtcPUhgFP2VM';
 const normDep = s => String(s).replace(/^[-\s]+/,'').replace(/\(.*?\)/g,'').trim().toUpperCase();
+
+/* ================= CALENDARIO (Excel aparte, una pestaña por mes) =================
+   Es una grilla: cada fila un depto, cada columna un día. La celda dice el código del
+   depto y, si está ocupado, el nombre del huésped entre puntos. También se anotan ahí
+   tareas del día (limpieza, blancos) y bloqueos (BLOQUEADO, propietario, obra…).
+   De acá sale, por depto y por mes: cuántos días estuvo trabado y cuántos ocupado. */
+const CAL_ID = '1jkwUJQNaAhqYjn6OQCXrp9eq775t9mY86dXtQcGFZgg';
+const CAL_ANO = 2026;                      // el archivo del calendario es uno por año
+let CAL = {};                              // 'mes/ano' -> { depto -> {dias,bloq,ocup,libre} }
+let CAL_ESTADO = {};                       // 'mes/ano' -> 'ok' | 'sin-datos' | 'error'
+
+// lo que significa "este depto no se podía alquilar ese día"
+const CAL_BLOQUEA = /(bloq|propiet|refacc|obra|pintura|mantenim)/;
+// tareas del día a día: NO son un bloqueo y tampoco son el nombre de un huésped
+const CAL_TAREAS = /(limpieza|blanco|sucio|toalla|sabana|s[áa]bana|acolchado|repaso|repasar|profunda|fumigac|visita|wifi|internet|t[ée]cnico|mascota|sillon|sill[óo]n|pax|late|in\s*hs|out\s*hs|sacar|recordar|revisar|extra|aire)/;
+
+function calSinAcentos(t){ return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+
+// Dada una celda, decide si ese día el depto estuvo TRABADO, OCUPADO o LIBRE.
+// El huésped SIEMPRE se escribe entre puntos (".Juan Perez."); las tareas del día
+// van sueltas después. Por eso primero buscamos el texto entre puntos y recién ahí
+// decidimos si es una persona, un bloqueo o una tarea.
+function calLeerCelda(txt, cod){
+  let t = String(txt||'').trim();
+  if(!t) return 'libre';
+  const c = String(cod).replace(/^[-\s]+/,'');
+  t = t.replace(/^[-\s]*/,'');
+  if(t.toUpperCase().startsWith(c.toUpperCase())) t = t.slice(c.length);
+  if(CAL_BLOQUEA.test(calSinAcentos(t))) return 'trabado';
+  const m = t.match(/\.\s*([^.]+)/);          // del primer punto hasta el siguiente
+  if(!m) return 'libre';
+  const cand = m[1].replace(/\(.*?\)/g,' ').trim();
+  const plano = calSinAcentos(cand);
+  if(CAL_TAREAS.test(plano)) return 'libre';
+  return /[a-z]{3}/.test(plano) ? 'ocupado' : 'libre';
+}
+
+async function cargarCalendario(mes, ano){
+  const k = mes+'/'+ano;
+  if(CAL[k] || CAL_ESTADO[k]) return;          // ya está en memoria
+  if(ano !== CAL_ANO){ CAL_ESTADO[k]='sin-datos'; return; }
+  try{
+    const hoja = MESES[mes].toUpperCase();
+    const url = `https://docs.google.com/spreadsheets/d/${CAL_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(hoja)}&t=${Date.now()}`;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const raw = parseCSV(await r.text());
+    // la fila de los números de día es la que empieza con "Dptos:"
+    let fh = raw.findIndex(x => /dptos/i.test(String(x[0]||'')));
+    if(fh < 0) fh = 1;
+    const dias = [];
+    raw[fh].forEach((v,i)=>{ if(i>0 && /^\d{1,2}$/.test(String(v).trim())) dias.push(i); });
+    if(!dias.length) throw new Error('no se encontraron los días');
+    const porDep = {};
+    for(let i=fh+1;i<raw.length;i++){
+      const cod = String(raw[i][0]||'').trim();
+      if(!cod || /dptos/i.test(cod)) continue;
+      const d = normDep(cod);
+      if(!d) continue;
+      const acc = porDep[d] = porDep[d] || {dias:0, trabado:0, ocupado:0, libre:0};
+      dias.forEach(ci=>{ acc.dias++; acc[calLeerCelda(raw[i][ci], cod)]++; });
+    }
+    CAL[k] = porDep;
+    CAL_ESTADO[k] = Object.keys(porDep).length ? 'ok' : 'sin-datos';
+  }catch(e){ CAL_ESTADO[k] = 'error'; }
+}
+
+// ¿Estuvo el depto trabado TODO el mes? (la regla que definió Brico)
+function calTrabadoTodoElMes(dep, mes, ano){
+  const c = CAL[mes+'/'+ano]; if(!c) return false;
+  const x = c[normDep(dep)];
+  return !!x && x.dias>0 && x.trabado===x.dias;
+}
+function calTieneMes(dep, mes, ano){
+  const c = CAL[mes+'/'+ano]; return !!(c && c[normDep(dep)]);
+}
 function serial(f){ return f ? f.y*10000+f.m*100+f.d : 0; }
 function mepRate(f){
   if(!MEP.length) return 0;
@@ -1044,6 +1130,15 @@ function renderIng(){
       </div></div>`;
   } else w.innerHTML='';
   const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), per=perGet('ms-ing-per');
+  // el calendario se lee al vuelo, solo los meses que estás mirando (no los doce)
+  const mesesPer = [...per].map(k=>k.split('/').map(Number));
+  const faltan = mesesPer.filter(([m,a])=>!CAL[m+'/'+a] && !CAL_ESTADO[m+'/'+a]);
+  if(faltan.length){ Promise.all(faltan.map(([m,a])=>cargarCalendario(m,a))).then(()=>render()); }
+  // un depto está "fuera de alquiler" si estuvo trabado el mes ENTERO, en todos los
+  // meses del período. Si estuvo trabado unos días nomás, cuenta como uno normal.
+  const hayCal = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='ok');
+  const fueraDeAlquiler = d => hayCal && mesesPer.length>0
+    && mesesPer.every(([m,a])=>calTrabadoTodoElMes(d,m,a));
   const enPer = r => per.has(r.mes+'/'+r.ano);
   let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&enPer(r));
   const totU = rows.reduce((a,r)=>a+effIngU(r),0);
@@ -1091,6 +1186,58 @@ function renderIng(){
            en ${xInact.length} ${xInact.length===1?'fila':'filas'} de departamentos marcados como inactivos.</div>`:''}
       </div>
     </div>`;
+
+  // ---- COSAS PARA REVISAR: cruces entre el Excel de $$$ y el calendario ----
+  const inact = {};
+  xInact.forEach(r=>{ const a=inact[r.dep]=inact[r.dep]||{u:0,n:0}; a.u+=(r.ingU||0); a.n++; });
+  const inactL = Object.entries(inact).sort((a,b)=>b[1].u-a[1].u);
+  // departamentos activos que no figuran en el calendario de ninguno de los meses mirados
+  const sinCal = hayCal
+    ? [...ACTIVOS].filter(d=>!mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]!=='ok' || calTieneMes(d,m,a))).sort()
+    : [];
+  // ---- ocupado en el calendario pero sin NINGÚN ingreso cargado en el Excel ----
+  // Se compara contra el rango completo de cada reserva (entrada a salida), no contra
+  // el mes de la carga: si no, una reserva del 28/7 al 5/8 daría falsa alarma en agosto.
+  const tocaMes = (r,m,a) => {
+    const fi = parseFecha(r.fIn) || parseFecha(r.fecha); if(!fi) return false;
+    const fo = parseFecha(r.fOut) || fi;
+    return serial(fi) <= a*10000+m*100+31 && serial(fo) >= a*10000+m*100+1;
+  };
+  const sinCargar = [];
+  mesesPer.forEach(([m,a])=>{
+    const c = CAL[m+'/'+a]; if(!c) return;
+    Object.entries(c).forEach(([d,x])=>{
+      if(!x.ocupado) return;
+      const cargado = ROWS.some(r => r.ing!==0 && normDep(r.dep)===d && tocaMes(r,m,a));
+      if(!cargado) sinCargar.push({dep:d, dias:x.ocupado, cuando:MESES[m]+' '+a});
+    });
+  });
+  sinCargar.sort((a,b)=>b.dias-a.dias);
+  const nAvisos = inactL.length + sinCal.length + sinCargar.length;
+  const calFallo = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='error');
+  const calSinAno = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='sin-datos');
+  document.getElementById('k-ing3').innerHTML = (nAvisos||calFallo||calSinAno) ? `
+    <div class="avi" id="aviBox">
+      <div class="debTop" onclick="document.getElementById('aviBox').classList.toggle('on')">
+        <div>
+          <div class="debTit">Cosas para revisar</div>
+          <div class="debVal">${nAvisos} <small>${nAvisos===1?'aviso':'avisos'}</small></div>
+        </div>
+        ${nAvisos?'<button class="debVer">Ver el detalle ▾</button>':''}
+      </div>
+      <div class="debDet">
+        ${sinCargar.length?`<div class="aviTit">Se alojó gente pero no hay ningún ingreso cargado (${sinCargar.length})</div>
+          ${sinCargar.map(x=>`<div class="aviLin">• <b>${x.dep}</b> — ${x.dias} ${x.dias===1?'día ocupado':'días ocupados'} en ${x.cuando}
+            <span>· el calendario dice que hubo huéspedes y en el Excel no figura ninguna reserva</span></div>`).join('')}`:''}
+        ${inactL.length?`<div class="aviTit">Marcados como inactivos pero tuvieron ingresos (${inactL.length})</div>
+          ${inactL.map(([d,x])=>`<div class="aviLin">• <b>${d}</b> — u$s ${fmt(x.u)} en ${x.n} ${x.n===1?'reserva':'reservas'}
+            <span>· esta plata no está sumada en el total</span></div>`).join('')}`:''}
+        ${sinCal.length?`<div class="aviTit">Activos en el Excel pero no figuran en el calendario (${sinCal.length})</div>
+          <div class="aviLin">${sinCal.join(' · ')}</div>`:''}
+        ${calSinAno?`<div class="aviLin"><span>El calendario que leo es el de ${CAL_ANO}. Para meses de otros años no puedo hacer estos controles.</span></div>`:''}
+        ${calFallo?`<div class="aviLin"><span>No pude leer el calendario de algún mes del período. Los controles que dependen de él quedaron sin hacer.</span></div>`:''}
+      </div>
+    </div>` : '';
   // Los departamentos que no tuvieron NINGUNA reserva no aparecen en las filas de ingresos,
   // así que arrancamos la cuenta en cero para todos los activos: si no, los que peor andan
   // (los que no facturaron nada) quedarían invisibles justo en la vista que los busca.
@@ -1101,6 +1248,10 @@ function renderIng(){
     (sinFiltrarDep ? [...ACTIVOS] : [...dep]).forEach(d=>{ if(d) byDep[d]=0; });
   }
   rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
+  // los que estuvieron fuera de alquiler todo el período no compiten con el resto:
+  // no es que no se alquilaron, es que no se podían alquilar
+  const trabados = Object.keys(byDep).filter(d=>byDep[d]===0 && fueraDeAlquiler(d));
+  trabados.forEach(d=>delete byDep[d]);
   const enCero = Object.values(byDep).filter(v=>v===0).length;
   const ordenados = Object.entries(byDep).sort((a,b)=> ordenDep==='top' ? b[1]-a[1] : a[1]-b[1]);
   const listaDep = ordenados.slice(0,12);
@@ -1108,9 +1259,13 @@ function renderIng(){
     ? 'Ingresos por departamento · los 12 que más entran'
     : 'Ingresos por departamento · los 12 que menos entran';
   const nota = document.getElementById('n-ing-dep');
-  if(nota) nota.textContent = ordenDep==='bot' && enCero
-    ? `${enCero} ${enCero===1?'departamento activo no tuvo':'departamentos activos no tuvieron'} ningún ingreso en el período`
-    : '';
+  if(nota){
+    const p1 = enCero ? `${enCero} ${enCero===1?'departamento se podía alquilar y no tuvo':'departamentos se podían alquilar y no tuvieron'} ningún ingreso` : '';
+    const p2 = trabados.length ? `${trabados.length} ${trabados.length===1?'estuvo fuera de alquiler':'estuvieron fuera de alquiler'} todo el período: ${trabados.sort().join(', ')}` : '';
+    nota.innerHTML = ordenDep==='bot'
+      ? [p1, p2 && `<span style="color:var(--gold)">${p2}</span>`].filter(Boolean).join(' · ')
+      : '';
+  }
   mkChart('ch-ing-dep','bar',listaDep.map(e=>e[0]),
     [{label:'Ingresos',data:listaDep.map(e=>e[1]),
       backgroundColor:listaDep.map(e=>e[1]<=0 ? '#6b7280' : (ordenDep==='bot' ? '#d4af37' : '#CC1414')),
