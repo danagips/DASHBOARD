@@ -83,6 +83,11 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .kpi .v{font-size:24px;font-weight:800;margin-top:6px}
 .kpi .v.pos{color:var(--green)} .kpi .v.negv{color:var(--neg)} .kpi .v.gold{color:var(--gold)} .kpi .v.red{color:var(--red)}
 .kpi .s{font-size:11px;color:var(--muted);margin-top:3px}
+/* segunda fila de indicadores: mismos cuadros pero más chicos y angostos */
+.kpis.mini{grid-template-columns:repeat(auto-fit,minmax(150px,220px));gap:10px}
+.kpis.mini .kpi{padding:11px 14px}
+.kpis.mini .kpi .v{font-size:18px;margin-top:4px}
+.kpis.mini .kpi .t{font-size:10px}
 /* ---------- CHARTS / TABLES ---------- */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
@@ -148,10 +153,6 @@ th.num{text-align:right}
     <button data-v="cf" onclick="setView('cf')">💼 Comisión F</button>
   </nav>
   <span id="upd"></span>
-  <div id="curTgl">
-    <button id="curU" class="on" onclick="setCur('USD')">u$s</button>
-    <button id="curA" onclick="setCur('ARS')">AR$</button>
-  </div>
   <button class="hbtn" onclick="loadData()">↻ Actualizar</button>
   <button class="hbtn" onclick="openCfg()">⚙</button>
 </header>
@@ -167,6 +168,7 @@ th.num{text-align:right}
       <div class="f"><label>Plataforma</label><div class="ms" id="ms-ing-pla"></div></div>
     </div>
     <div class="kpis" id="k-ing"></div>
+    <div class="kpis mini" id="k-ing2"></div>
     <div class="grid2">
       <div class="card"><h3>Ingresos por departamento (Top 12)</h3><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
       <div class="card"><h3>Ingresos por plataforma</h3><div class="ch"><canvas id="ch-ing-pla"></canvas></div></div>
@@ -389,7 +391,7 @@ function spMesAno(a,b){ const [ma,ya]=a.split('/').map(Number), [mb,yb]=b.split(
 /* ================= DATA ================= */
 let ROWS = [];
 let ING=[], EGR=[], BK=[], RECL=[], ABNB=[];
-let CUR = localStorage.getItem('r28_cur') || 'USD';
+let CUR = 'USD';   // moneda fija: se sacó el selector u$s / AR$ del encabezado
 let charts = {};
 let msState = {};
 let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
@@ -648,10 +650,6 @@ function makeMS(id, values, label, defaultAll=true, selected=null){
   el.innerHTML = `<button class="msBtn" onclick="msToggle('${id}')"><span id="${id}-lbl"></span></button>
     <div class="msPanel">
       <input placeholder="Buscar…" oninput="msFilter('${id}',this.value)">
-      <div class="msActions">
-        <button onclick="msAll('${id}',true)">Todos</button>
-        <button onclick="msAll('${id}',false)">Ninguno</button>
-      </div>
       <div class="msList" id="${id}-list"></div>
     </div>`;
   msRender(id);
@@ -698,19 +696,22 @@ function makePer(id, arbol, selected=null){
   const todas = [];
   anos.forEach(a => [...arbol[a]].sort((x,y)=>x-y).forEach(m => todas.push(m+'/'+a)));
   let sel = selected ? selected.filter(k=>todas.includes(k)) : [];
-  if(!sel.length && anos.length){            // por defecto: el año más reciente, completo
-    const ult = anos[anos.length-1];
-    sel = [...arbol[ult]].map(m=>m+'/'+ult);
+  if(!sel.length && todas.length){
+    // por defecto: EL MES EN CURSO. Si todavía no tiene movimientos cargados,
+    // cae al último mes con datos que no sea futuro (y si no hay, al más reciente).
+    const hoy = new Date(), mHoy = hoy.getMonth()+1, aHoy = hoy.getFullYear();
+    if(arbol[aHoy] && arbol[aHoy].has(mHoy)) sel = [mHoy+'/'+aHoy];
+    else {
+      const pasados = todas.filter(k=>{ const [m,a]=k.split('/').map(Number); return a*100+m <= aHoy*100+mHoy; });
+      sel = [ pasados.length ? pasados[pasados.length-1] : todas[todas.length-1] ];
+    }
   }
-  const ultAno = anos.length ? anos[anos.length-1] : null;
-  const abiertos = perState[id] ? perState[id].abiertos : new Set(ultAno ? [ultAno] : []);
+  // arranca abierto el año que quedó seleccionado
+  const anoSel = sel.length ? Number(sel[0].split('/')[1]) : null;
+  const abiertos = perState[id] ? perState[id].abiertos : new Set(anoSel ? [anoSel] : []);
   perState[id] = { arbol, anos, todas, sel:new Set(sel), abiertos };
   el.innerHTML = `<button class="msBtn" onclick="perToggle('${id}')"><span id="${id}-lbl"></span></button>
     <div class="msPanel">
-      <div class="msActions">
-        <button onclick="perAll('${id}',true)">Todos</button>
-        <button onclick="perAll('${id}',false)">Ninguno</button>
-      </div>
       <div class="perList" id="${id}-list"></div>
     </div>`;
   // el tablero cierra los desplegables cuando se clickea "afuera". Como acá el contenido
@@ -743,8 +744,8 @@ function perLbl(id){
   const s = perState[id], lbl = document.getElementById(id+'-lbl');
   const n = s.sel.size;
   if(n===0){ lbl.textContent='Ninguno'; return; }
-  if(n===s.todas.length){ lbl.textContent='Todos los períodos'; return; }
   if(n===1){ const [m,a]=[...s.sel][0].split('/'); lbl.textContent = MESES[+m]+' '+a; return; }
+  if(n===s.todas.length){ lbl.textContent='Todos los períodos'; return; }
   const anosSel = [...new Set([...s.sel].map(k=>+k.split('/')[1]))];
   if(anosSel.length===1){
     const a = anosSel[0];
@@ -839,9 +840,11 @@ function setView(v){
   render();
 }
 function setCur(c){
-  CUR = c; localStorage.setItem('r28_cur',c);
-  document.getElementById('curU').classList.toggle('on', c==='USD');
-  document.getElementById('curA').classList.toggle('on', c==='ARS');
+  // queda por si alguna vez se quiere volver a mostrar el selector de moneda
+  CUR = c;
+  const u=document.getElementById('curU'), a=document.getElementById('curA');
+  if(u) u.classList.toggle('on', c==='USD');
+  if(a) a.classList.toggle('on', c==='ARS');
   render();
 }
 function vIng(r){ return CUR==='USD' ? r.ingU : r.ingA; }
@@ -1003,10 +1006,14 @@ function renderIng(){
   const totARS = rows.filter(r=>r.moneda==='ARS'&&!r.debe).reduce((a,r)=>a+r.ing,0);
   const noches = rows.reduce((a,r)=>a+r.noches,0);
   const debe = rows.filter(r=>r.debe).reduce((a,r)=>a+vIng(r),0);
+  // lo cobrado en pesos, pasado a dólares (col AG del Excel; MEP por fecha si está vacía)
+  const arsEnUsd = rows.filter(r=>r.moneda==='ARS'&&!r.debe).reduce((a,r)=>a+r.ingU,0);
   document.getElementById('k-ing').innerHTML = `
-    <div class="kpi"><div class="t">Ingresos totales (siempre u$s · MEP)</div><div class="v pos">u$s ${fmt(totU)}</div><div class="s">sin lo adeudado (col M)</div></div>
-    <div class="kpi"><div class="t">Cobrado en u$s (col I)</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
-    <div class="kpi"><div class="t">Cobrado en AR$ (col I)</div><div class="v">$ ${fmt(totARS)}</div></div>
+    <div class="kpi"><div class="t">Total en pesos</div><div class="v">$ ${fmt(totARS)}</div><div class="s">cobrado en AR$ (col I)</div></div>
+    <div class="kpi"><div class="t">Total de pesos a u$s</div><div class="v gold">u$s ${fmt(arsEnUsd)}</div><div class="s">esos mismos pesos, dolarizados</div></div>
+    <div class="kpi"><div class="t">Total en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div><div class="s">cobrado en dólares (col I)</div></div>
+    <div class="kpi"><div class="t">Total de ingresos en u$s</div><div class="v pos">u$s ${fmt(totU)}</div><div class="s">los dos anteriores sumados · sin lo adeudado</div></div>`;
+  document.getElementById('k-ing2').innerHTML = `
     <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
     <div class="kpi"><div class="t">Debe / pendiente (no suma)</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
   // diagnóstico: qué quedó AFUERA del total (para comparar contra Power BI)
@@ -1017,7 +1024,7 @@ function renderIng(){
   const sA = a=>a.filter(r=>r.moneda==='ARS').reduce((s,r)=>s+r.ing,0);
   if(xDebe.length||xInact.length){
     const det = a => a.map(r=>`${r.fecha} · <b>${r.dep}</b> · ${r.hue||'(sin huésped)'} · ${r.moneda==='USD'?'u$s':'$'} ${fmt(r.ing)}`).join('<br>');
-    document.getElementById('k-ing').innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+    document.getElementById('k-ing2').innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
       🔍 <b>Fuera del total</b> (por si comparás con Power BI): por DEBE → u$s ${fmt(sU(xDebe))} + $ ${fmt(sA(xDebe))} (${xDebe.length} filas) · por deptos inactivos → u$s ${fmt(sU(xInact))} + $ ${fmt(sA(xInact))} (${xInact.length} filas)
       <a href="#" onclick="document.getElementById('exclDet').style.display='block';return false" style="color:var(--gold)"> Ver detalle</a>
       <div id="exclDet" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto">
