@@ -88,6 +88,28 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .kpis.mini .kpi{padding:11px 14px}
 .kpis.mini .kpi .v{font-size:18px;margin-top:4px}
 .kpis.mini .kpi .t{font-size:10px}
+/* bloque único de lo pendiente de cobro (antes: cuadrito DEBE + franja "fuera del total") */
+.deb{background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid rgba(255,92,92,.35);
+  border-radius:14px;padding:14px 18px;margin-bottom:18px}
+.deb.vacio{border-color:var(--border)}
+.debTop{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;cursor:pointer}
+.debTit{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.debVal{font-size:24px;font-weight:800;color:var(--neg);margin-top:4px}
+.debVal small{font-size:12px;font-weight:600;color:var(--muted);margin-left:8px;letter-spacing:0}
+.debVer{background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:8px;
+  padding:7px 13px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.debVer:hover{color:var(--txt)}
+.debDet{display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;max-height:260px;overflow-y:auto}
+.deb.on .debDet{display:block}
+.debDet table{width:100%;border-collapse:collapse;font-size:13px}
+.debDet td{padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.05)}
+.debDet td:nth-child(1){width:100px}
+.debDet td:nth-child(2){width:110px}
+.debDet td:nth-child(4){width:120px}
+.debDet td:nth-child(5){width:110px}
+.debDet td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.debDet tr:last-child td{border-bottom:none}
+.debNota{font-size:11px;color:var(--muted);margin-top:10px}
 /* ---------- CHARTS / TABLES ---------- */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
@@ -168,7 +190,7 @@ th.num{text-align:right}
       <div class="f"><label>Plataforma</label><div class="ms" id="ms-ing-pla"></div></div>
     </div>
     <div class="kpis" id="k-ing"></div>
-    <div class="kpis mini" id="k-ing2"></div>
+    <div id="k-ing2"></div>
     <div class="grid2">
       <div class="card"><h3>Ingresos por departamento (Top 12)</h3><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
       <div class="card"><h3>Ingresos por plataforma</h3><div class="ch"><canvas id="ch-ing-pla"></canvas></div></div>
@@ -1009,29 +1031,42 @@ function renderIng(){
   // lo cobrado en pesos, pasado a dólares (col AG del Excel; MEP por fecha si está vacía)
   const arsEnUsd = rows.filter(r=>r.moneda==='ARS'&&!r.debe).reduce((a,r)=>a+r.ingU,0);
   document.getElementById('k-ing').innerHTML = `
-    <div class="kpi"><div class="t">Total en pesos</div><div class="v">$ ${fmt(totARS)}</div><div class="s">cobrado en AR$ (col I)</div></div>
-    <div class="kpi"><div class="t">Total de pesos a u$s</div><div class="v gold">u$s ${fmt(arsEnUsd)}</div><div class="s">esos mismos pesos, dolarizados</div></div>
-    <div class="kpi"><div class="t">Total en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div><div class="s">cobrado en dólares (col I)</div></div>
-    <div class="kpi"><div class="t">Total de ingresos en u$s</div><div class="v pos">u$s ${fmt(totU)}</div><div class="s">los dos anteriores sumados · sin lo adeudado</div></div>`;
+    <div class="kpi"><div class="t">Total en pesos</div><div class="v">$ ${fmt(totARS)}</div></div>
+    <div class="kpi"><div class="t">Total de pesos a u$s</div><div class="v gold">u$s ${fmt(arsEnUsd)}</div></div>
+    <div class="kpi"><div class="t">Total en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
+    <div class="kpi"><div class="t">Total de ingresos en u$s</div><div class="v pos">u$s ${fmt(totU)}</div></div>`;
+  // ---- PENDIENTE DE COBRO: total + quién debe, todo en un solo bloque ----
+  const filasDebe = rows.filter(r=>r.debe).sort((a,b)=>{
+    const fa=parseFecha(a.fIn)||parseFecha(a.fecha), fb=parseFecha(b.fIn)||parseFecha(b.fecha);
+    return serial(fa)-serial(fb);   // lo más viejo primero: es lo más atrasado
+  });
+  const debeU = filasDebe.reduce((a,r)=>a+r.ingU,0);
+  // deptos inactivos: no entran al total y no son un "debe"; solo se avisa si aparece alguno
+  const xInact = ROWS.filter(r=>r.ing!==0 && enPer(r) && !r.debe && r.dep && ACTIVOS.size
+                                && !ACTIVOS.has(r.dep) && !/reclamo/i.test(r.dep));
+  const inactU = xInact.reduce((a,r)=>a+(r.ingU||0),0);
   document.getElementById('k-ing2').innerHTML = `
-    <div class="kpi"><div class="t">Reservas</div><div class="v">${rows.length}</div><div class="s">${fmt(noches)} noches</div></div>
-    <div class="kpi"><div class="t">Debe / pendiente (no suma)</div><div class="v ${debe>0?'negv':''}">${fmtM(debe)}</div></div>`;
-  // diagnóstico: qué quedó AFUERA del total (para comparar contra Power BI)
-  const fBase = ROWS.filter(r=>r.ing!==0 && enPer(r));
-  const xDebe = fBase.filter(r=>r.debe);
-  const xInact = fBase.filter(r=>!r.debe && r.dep && ACTIVOS.size && !ACTIVOS.has(r.dep) && !/reclamo/i.test(r.dep));
-  const sU = a=>a.filter(r=>r.moneda==='USD').reduce((s,r)=>s+r.ing,0);
-  const sA = a=>a.filter(r=>r.moneda==='ARS').reduce((s,r)=>s+r.ing,0);
-  if(xDebe.length||xInact.length){
-    const det = a => a.map(r=>`${r.fecha} · <b>${r.dep}</b> · ${r.hue||'(sin huésped)'} · ${r.moneda==='USD'?'u$s':'$'} ${fmt(r.ing)}`).join('<br>');
-    document.getElementById('k-ing2').innerHTML += `<div style="grid-column:1/-1;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
-      🔍 <b>Fuera del total</b> (por si comparás con Power BI): por DEBE → u$s ${fmt(sU(xDebe))} + $ ${fmt(sA(xDebe))} (${xDebe.length} filas) · por deptos inactivos → u$s ${fmt(sU(xInact))} + $ ${fmt(sA(xInact))} (${xInact.length} filas)
-      <a href="#" onclick="document.getElementById('exclDet').style.display='block';return false" style="color:var(--gold)"> Ver detalle</a>
-      <div id="exclDet" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto">
-        ${xDebe.length?'<b style="color:var(--neg)">DEBE:</b><br>'+det(xDebe)+'<br>':''}
-        ${xInact.length?'<b style="color:var(--gold)">Deptos inactivos:</b><br>'+det(xInact):''}
-      </div></div>`;
-  }
+    <div class="deb ${filasDebe.length?'':'vacio'}" id="debBox">
+      <div class="debTop" onclick="document.getElementById('debBox').classList.toggle('on')">
+        <div>
+          <div class="debTit">Debe · pendiente de cobro (no suma al total)</div>
+          <div class="debVal" style="${filasDebe.length?'':'color:var(--muted)'}">u$s ${fmt(debeU)}
+            <small>${filasDebe.length} ${filasDebe.length===1?'reserva':'reservas'}</small></div>
+        </div>
+        ${filasDebe.length?'<button class="debVer">Ver quién debe ▾</button>':''}
+      </div>
+      <div class="debDet">
+        <table><tbody>${filasDebe.map(r=>`<tr>
+          <td style="color:var(--muted);white-space:nowrap">${r.fIn||r.fecha}</td>
+          <td><b>${r.dep}</b></td>
+          <td>${r.hue||'(sin huésped)'}</td>
+          <td class="num">${r.moneda==='USD'?'u$s':'$'} ${fmt(r.ing)}</td>
+          <td class="num" style="color:var(--muted);font-weight:500">${r.moneda==='ARS'?'= u$s '+fmt(r.ingU):''}</td>
+        </tr>`).join('')}</tbody></table>
+        ${xInact.length?`<div class="debNota">Además quedaron afuera del total u$s ${fmt(inactU)}
+           en ${xInact.length} ${xInact.length===1?'fila':'filas'} de departamentos marcados como inactivos.</div>`:''}
+      </div>
+    </div>`;
   const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
   mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
