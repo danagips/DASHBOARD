@@ -110,6 +110,15 @@ main{padding:22px;max-width:1500px;margin:0 auto}
 .debDet td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
 .debDet tr:last-child td{border-bottom:none}
 .debNota{font-size:11px;color:var(--muted);margin-top:10px}
+/* cabecera del gráfico con el par de botones para dar vuelta el orden */
+.chHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.chHead h3{margin:0}
+.segs{display:flex;gap:0;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.segs button{background:transparent;border:0;color:var(--muted);padding:6px 12px;font-size:12px;
+  font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+.segs button:hover{color:var(--txt)}
+.segs button.on{background:var(--red);color:#fff}
+.chNota{font-size:11px;color:var(--muted);margin-top:-2px;margin-bottom:8px}
 /* ---------- CHARTS / TABLES ---------- */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
@@ -192,12 +201,19 @@ th.num{text-align:right}
     <div class="kpis" id="k-ing"></div>
     <div id="k-ing2"></div>
     <div class="grid2">
-      <div class="card"><h3>Ingresos por departamento (Top 12)</h3><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
+      <div class="card">
+        <div class="chHead">
+          <h3 id="h-ing-dep">Ingresos por departamento</h3>
+          <div class="segs">
+            <button id="segTop" class="on" onclick="setOrdenDep('top')">Los que más entran</button>
+            <button id="segBot" onclick="setOrdenDep('bot')">Los que menos entran</button>
+          </div>
+        </div>
+        <div class="chNota" id="n-ing-dep"></div><div class="ch"><canvas id="ch-ing-dep"></canvas></div></div>
       <div class="card"><h3>Ingresos por plataforma</h3><div class="ch"><canvas id="ch-ing-pla"></canvas></div></div>
     </div>
     <div class="tblCard">
-      <div class="tblHead"><h3 id="t-ing-n">Detalle de ingresos</h3><button class="hbtn" onclick="expCSV('ing')">⬇ CSV</button></div>
-      <div class="tblWrap" id="t-ing"></div>
+      <div class="tblHead"><h3 id="t-ing-n">Detalle de ingresos</h3><button class="hbtn" onclick="expCSV('ing')">⬇ Descargar detalle en CSV</button></div>
     </div>
   </div>
 
@@ -869,6 +885,14 @@ function setCur(c){
   if(a) a.classList.toggle('on', c==='ARS');
   render();
 }
+// orden del gráfico de departamentos: los que más entran o los que menos
+let ordenDep = 'top';
+function setOrdenDep(v){
+  ordenDep = v;
+  document.getElementById('segTop').classList.toggle('on', v==='top');
+  document.getElementById('segBot').classList.toggle('on', v==='bot');
+  render();
+}
 function vIng(r){ return CUR==='USD' ? r.ingU : r.ingA; }
 function vEgr(r){ return CUR==='USD' ? r.egrU : r.egrA; }
 function vCom(r){ return CUR==='USD' ? r.comU : r.comA; }
@@ -1067,36 +1091,37 @@ function renderIng(){
            en ${xInact.length} ${xInact.length===1?'fila':'filas'} de departamentos marcados como inactivos.</div>`:''}
       </div>
     </div>`;
-  const byDep={}; rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
-  const topDep = Object.entries(byDep).sort((a,b)=>b[1]-a[1]).slice(0,12);
-  mkChart('ch-ing-dep','bar',topDep.map(e=>e[0]),[{label:'Ingresos',data:topDep.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
+  // Los departamentos que no tuvieron NINGUNA reserva no aparecen en las filas de ingresos,
+  // así que arrancamos la cuenta en cero para todos los activos: si no, los que peor andan
+  // (los que no facturaron nada) quedarían invisibles justo en la vista que los busca.
+  const byDep={};
+  const msDep = msState['ms-ing-dep'];
+  const sinFiltrarDep = msDep && msDep.sel.size===msDep.vals.length;
+  if(ACTIVOS.size){
+    (sinFiltrarDep ? [...ACTIVOS] : [...dep]).forEach(d=>{ if(d) byDep[d]=0; });
+  }
+  rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
+  const enCero = Object.values(byDep).filter(v=>v===0).length;
+  const ordenados = Object.entries(byDep).sort((a,b)=> ordenDep==='top' ? b[1]-a[1] : a[1]-b[1]);
+  const listaDep = ordenados.slice(0,12);
+  document.getElementById('h-ing-dep').textContent = ordenDep==='top'
+    ? 'Ingresos por departamento · los 12 que más entran'
+    : 'Ingresos por departamento · los 12 que menos entran';
+  const nota = document.getElementById('n-ing-dep');
+  if(nota) nota.textContent = ordenDep==='bot' && enCero
+    ? `${enCero} ${enCero===1?'departamento activo no tuvo':'departamentos activos no tuvieron'} ningún ingreso en el período`
+    : '';
+  mkChart('ch-ing-dep','bar',listaDep.map(e=>e[0]),
+    [{label:'Ingresos',data:listaDep.map(e=>e[1]),
+      backgroundColor:listaDep.map(e=>e[1]<=0 ? '#6b7280' : (ordenDep==='bot' ? '#d4af37' : '#CC1414')),
+      borderRadius:6}]);
   const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+effIng(r));
   const plaE = Object.entries(byPla).sort((a,b)=>b[1]-a[1]);
   mkChart('ch-ing-pla','doughnut',plaE.map(e=>e[0]),[{data:plaE.map(e=>e[1]),backgroundColor:PALETTE,borderWidth:0}],{cutout:'62%'});
   const s=sortState.ing; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.ing = rows;
-  document.getElementById('t-ing-n').textContent = `Detalle de ingresos (${rows.length})`;
-  document.getElementById('t-ing').innerHTML = `<table>
-    <thead><tr>
-      <th onclick="sortTable('ing','fecha')">Fecha</th><th onclick="sortTable('ing','dep')">Depto</th>
-      <th onclick="sortTable('ing','pla')">Plataforma</th><th onclick="sortTable('ing','hue')">Huésped</th>
-      <th onclick="sortTable('ing','fIn')">In (col F)</th><th onclick="sortTable('ing','fOut')">Out (col H)</th>
-      <th class="num" onclick="sortTable('ing','noches')">Noches</th>
-      <th class="num" onclick="sortTable('ing','ingU')">Importe</th><th>Moneda orig.</th>
-      <th class="num">TC MEP</th>
-      <th onclick="sortTable('ing','formaPago')">Forma de pago</th><th onclick="sortTable('ing','donde')">Dónde $</th><th>Debe</th>
-    </tr></thead>
-    <tbody>${rows.map(r=>`<tr>
-      <td>${r.fecha}</td><td><b>${r.dep}</b></td><td>${r.pla}</td><td>${r.hue}</td>
-      <td>${r.fIn||'<span style="color:var(--neg)">—</span>'}</td><td>${r.fOut||''}</td>
-      <td class="num">${r.noches||''}</td>
-      <td class="num"><b>${fmt(vIng(r))}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td>
-      <td class="num" style="color:var(--muted)">${r.tc?fmt(r.tc):''}</td>
-      <td>${r.formaPago}</td><td>${r.donde}</td>
-      <td>${r.debe?'<span class="pill debe">DEBE</span>':''}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="7">TOTAL cobrado (${rows.length})</td><td class="num">${fmt(tot)}</td><td colspan="5"></td></tr></tfoot>
-  </table>`;
+  document.getElementById('t-ing-n').textContent =
+    `Detalle de ingresos · ${rows.length} ${rows.length===1?'reserva':'reservas'} en el período elegido`;
 }
 
 /* ---------- EGRESOS ---------- */
