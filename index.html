@@ -530,7 +530,7 @@ async function cargarCalendario(mes, ano){
       if(!cod || /dptos/i.test(cod)) continue;
       const d = normDep(cod);
       if(!d) continue;
-      const acc = porDep[d] = porDep[d] || {dias:0, trabado:0, ocupado:0, libre:0};
+      const acc = porDep[d] = porDep[d] || {dias:0, trabado:0, ocupado:0, libre:0, nombre: cod.replace(/^[-\s]+/,'').trim()};
       dias.forEach(ci=>{ acc.dias++; acc[calLeerCelda(raw[i][ci], cod)]++; });
     }
     CAL[k] = porDep;
@@ -1319,7 +1319,19 @@ function renderIng(){
     const p1 = enCero ? `${enCero} ${enCero===1?'departamento se podía alquilar y no tuvo':'departamentos se podían alquilar y no tuvieron'} ningún ingreso` : '';
     // los que no figuran en el calendario ya se listan arriba, en "Fuera de alquiler
     // este mes": repetirlos acá era ruido. Quedan solo los trabados, que arriba no están.
-    const bloq = trabados.filter(d=>!noFiguraEnCal(d)).sort();
+    // Sale del calendario y no de los activos del Excel: así aparecen también los deptos
+    // que están trabados pero no figuran como activos (p.ej. uno donde se quedó el propietario
+    // y todavía no se actualizó la solapa de propietarios).
+    const bloqM = new Map();
+    if(hayCal){
+      const enCal = new Set();
+      mesesPer.forEach(([m,a])=>{ const c=CAL[m+'/'+a]; if(c) Object.keys(c).forEach(k=>enCal.add(k)); });
+      enCal.forEach(k=>{
+        if(!mesesPer.every(ma => calOk(ma) && calTrabadoTodoElMes(k,ma[0],ma[1]))) return;
+        for(const [m,a] of mesesPer){ const c=CAL[m+'/'+a]; if(c && c[k]){ bloqM.set(k, c[k].nombre || k); break; } }
+      });
+    }
+    const bloq = [...bloqM.values()].sort();
     const p2 = bloq.length
       ? `${bloq.length} ${bloq.length===1?'estuvo trabado':'estuvieron trabados'} todo el período (${bloq.join(', ')})`
       : '';
