@@ -809,7 +809,7 @@ function msRender(id, filter=''){
   const bt = document.getElementById(id+'-todos');
   if(bt) bt.textContent = (s.sel.size===s.vals.length) ? 'Destildar todos' : `Tildar todos (${s.vals.length})`;
   const lbl = document.getElementById(id+'-lbl');
-  if(s.sel.size===s.vals.length) lbl.textContent = `Todos (${s.vals.length})`;
+  if(s.sel.size===s.vals.length) lbl.textContent = (s.label==='pla') ? 'Todos' : `Todos (${s.vals.length})`;
   else if(s.sel.size===0) lbl.textContent = 'Ninguno';
   else if(s.sel.size===1){ const v=[...s.sel][0]; lbl.textContent = s.label==='mes'?(MESES[v]||v):v; }
   else lbl.textContent = `${s.sel.size} seleccionados`;
@@ -1155,7 +1155,7 @@ function renderIng(){
         ${SIN_FECHA.map(x=>`${x.fecha} · ${x.dep} · ${x.hue||'(sin huésped)'} · ${x.moneda} ${fmt(x.ing)}`).join('<br>')}
       </div></div>`;
   } else w.innerHTML='';
-  const dep=msGet('ms-ing-dep'), pla=msGet('ms-ing-pla'), per=perGet('ms-ing-per');
+  const pla=msGet('ms-ing-pla'), per=perGet('ms-ing-per');
   // el calendario se lee al vuelo, solo los meses que estás mirando (no los doce)
   const mesesPer = [...per].map(k=>k.split('/').map(Number));
   const faltan = mesesPer.filter(([m,a])=>!CAL[m+'/'+a] && !CAL_ESTADO[m+'/'+a]);
@@ -1172,7 +1172,29 @@ function renderIng(){
   const noFiguraEnCal = d => hayCal && mesesPer.length>0 && mesesPer.every(ma =>
     calOk(ma) && !calTieneMes(d,ma[0],ma[1]));
   const enPer = r => per.has(r.mes+'/'+r.ano);
-  let rows = ING.filter(r=>dep.has(r.dep)&&pla.has(r.pla)&&enPer(r));
+
+  // ---- el desplegable de Departamento lista solo los que SE PODIAN ALQUILAR en el período ----
+  // (los mismos que muestra el gráfico). Se rearma cada vez que cambia el período.
+  // Salvaguarda: si un depto tuvo ingresos en el período, queda igual aunque el calendario
+  // diga lo contrario — no lo escondemos y así se puede revisar.
+  if(hayCal){
+    const conIngreso = new Set(ING.filter(enPer).map(r=>r.dep));
+    const alquilables = [...new Set(ING.map(r=>r.dep))]
+      .filter(d => conIngreso.has(d) || !fueraDeAlquiler(d));
+    const ms = msState['ms-ing-dep'];
+    const distinto = !ms || ms.vals.length!==alquilables.length
+      || alquilables.some(d=>!ms.vals.includes(d));
+    if(distinto){
+      // si el usuario tenía algunos elegidos, se respetan; si estaban todos, siguen todos.
+      // Y si los que tenía elegidos no existen en este período, vuelve a mostrarlos todos
+      // en vez de dejar la pantalla en blanco sin explicación.
+      let prev = (ms && ms.sel.size!==ms.vals.length) ? [...ms.sel] : null;
+      if(prev && !prev.some(d=>alquilables.includes(d))) prev = null;
+      makeMS('ms-ing-dep', alquilables, 'dep', true, prev);
+    }
+  }
+  const dep2 = msGet('ms-ing-dep');
+  let rows = ING.filter(r=>dep2.has(r.dep)&&pla.has(r.pla)&&enPer(r));
   const totU = rows.reduce((a,r)=>a+effIngU(r),0);
   const tot = rows.reduce((a,r)=>a+effIng(r),0);
   const totUSD = rows.filter(r=>r.moneda==='USD'&&!r.debe).reduce((a,r)=>a+r.ing,0);
@@ -1282,7 +1304,7 @@ function renderIng(){
   const msDep = msState['ms-ing-dep'];
   const sinFiltrarDep = msDep && msDep.sel.size===msDep.vals.length;
   if(ACTIVOS.size){
-    (sinFiltrarDep ? [...ACTIVOS] : [...dep]).forEach(d=>{ if(d) byDep[d]=0; });
+    (sinFiltrarDep ? [...ACTIVOS] : [...dep2]).forEach(d=>{ if(d) byDep[d]=0; });
   }
   rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   // los que estuvieron fuera de alquiler todo el período no compiten con el resto:
