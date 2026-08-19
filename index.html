@@ -1295,12 +1295,12 @@ function renderIng(){
   const nota = document.getElementById('n-ing-dep');
   if(nota){
     const p1 = enCero ? `${enCero} ${enCero===1?'departamento se podía alquilar y no tuvo':'departamentos se podían alquilar y no tuvieron'} ningún ingreso` : '';
+    // los que no figuran en el calendario ya se listan arriba, en "Fuera de alquiler
+    // este mes": repetirlos acá era ruido. Quedan solo los trabados, que arriba no están.
     const bloq = trabados.filter(d=>!noFiguraEnCal(d)).sort();
-    const aus  = trabados.filter(d=>noFiguraEnCal(d)).sort();
-    const p2 = [
-      bloq.length ? `${bloq.length} ${bloq.length===1?'estuvo trabado':'estuvieron trabados'} todo el período (${bloq.join(', ')})` : '',
-      aus.length ? `${aus.length} no ${aus.length===1?'figura':'figuran'} en el calendario del período (${aus.join(', ')})` : ''
-    ].filter(Boolean).join(' · ');
+    const p2 = bloq.length
+      ? `${bloq.length} ${bloq.length===1?'estuvo trabado':'estuvieron trabados'} todo el período (${bloq.join(', ')})`
+      : '';
     nota.innerHTML = ordenDep==='bot'
       ? [p1, p2 && `<span style="color:var(--gold)">${p2}</span>`].filter(Boolean).join(' · ')
       : '';
