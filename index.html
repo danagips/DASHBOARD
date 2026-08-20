@@ -716,6 +716,9 @@ async function loadData(){
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
         ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), egrOrig: Math.abs(egrRaw), com, comU, comA,
+        // fila en pesos que NO trae la conversión del Excel (col AG): se dolarizó con el
+        // MEP por fecha. Es el único caso donde el número puede separarse del Power BI.
+        sinAG: (!isUSD && ing!==0 && !agU), tcUsado: (!isUSD && ing!==0 && !agU) ? rate : 0,
         tc: (!isUSD && ing!==0) ? (agU ? Math.abs(ing/agU) : rate) : 0,
       });
     }
@@ -1269,7 +1272,10 @@ function renderIng(){
   sinCargar.sort((a,b)=>b.dias-a.dias);
   // los que no figuran en el calendario NO son un problema: son deptos que ese mes
   // no estaban en alquiler (el propietario los usa, obra, etc). Van informativos aparte.
-  const nAvisos = inactL.length + sinCargar.length;
+  // reservas en pesos que se convirtieron con el MEP porque les falta la columna AG
+  const conMEP = ING.filter(r => r.sinAG && enPer(r))
+                    .sort((a,b)=>b.ing-a.ing);
+  const nAvisos = inactL.length + sinCargar.length + conMEP.length;
   const calFallo = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='error');
   const calSinAno = mesesPer.some(([m,a])=>CAL_ESTADO[m+'/'+a]==='sin-datos');
   document.getElementById('k-ing3').innerHTML = (nAvisos||sinCal.length||calFallo||calSinAno) ? `
@@ -1283,6 +1289,10 @@ function renderIng(){
         <button class="debVer">Ver el detalle ▾</button>
       </div>
       <div class="debDet">
+        ${conMEP.length?`<div class="aviTit">Convertidas con la cotización MEP, no con la columna AG (${conMEP.length})</div>
+          ${conMEP.map(r=>`<div class="aviLin">• <b>${r.dep}</b> ${r.fIn||r.fecha} — $ ${fmt(r.ing)} → u$s ${fmt(r.ingU)}
+            <span>· ${r.tcUsado ? 'al MEP de esa fecha ('+fmt(r.tcUsado)+')' : 'SIN cotización disponible: quedó en cero'}</span></div>`).join('')}
+          <div class="aviLin"><span>Al Excel le falta la columna AG en estas filas. El Power BI puede darte otro número.</span></div>`:''}
         ${sinCargar.length?`<div class="aviTit">Se alojó gente pero no hay ningún ingreso cargado (${sinCargar.length})</div>
           ${sinCargar.map(x=>`<div class="aviLin">• <b>${x.dep}</b> — ${x.dias} ${x.dias===1?'día ocupado':'días ocupados'} en ${x.cuando}
             <span>· el calendario dice que hubo huéspedes y en el Excel no figura ninguna reserva</span></div>`).join('')}`:''}
