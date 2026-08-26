@@ -246,10 +246,9 @@ th.num{text-align:right}
 
   <div class="view" id="v-egr">
     <div class="filters">
+      <div class="f"><label>Período</label><div class="ms per" id="ms-egr-per"></div></div>
       <div class="f"><label>Depto / Edificio</label><div class="ms" id="ms-egr-edi"></div></div>
       <div class="f"><label>Concepto</label><div class="ms" id="ms-egr-cpt"></div></div>
-      <div class="f"><label>Año</label><div class="ms" id="ms-egr-ano"></div></div>
-      <div class="f"><label>Mes</label><div class="ms" id="ms-egr-mes"></div></div>
     </div>
     <div class="kpis" id="k-egr"></div>
     <div class="grid2">
@@ -958,8 +957,10 @@ function buildFilters(){
   makePer('ms-ing-per', arbolIng, perState['ms-ing-per'] ? [...perState['ms-ing-per'].sel] : null);
   makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi', true, prevAll('ms-egr-edi'));
   makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
-  makeMS('ms-egr-ano', anosAll, 'ano', false, prevY('ms-egr-ano')||[curY]);
-  makeMS('ms-egr-mes', M12, 'mes', true, prevAll('ms-egr-mes'));
+  // Período (año ▸ meses), igual que en Ingresos
+  const arbolEgr = {};
+  EGR.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
+  makePer('ms-egr-per', arbolEgr, perState['ms-egr-per'] ? [...perState['ms-egr-per'].sel] : null);
   makeMS('ms-dep-dep', depsAll, 'dep', true, prevAll('ms-dep-dep'));
   makeMS('ms-dep-ano', anosAll, 'ano', false, prevY('ms-dep-ano')||[curY]);
   makeMS('ms-dep-mes', M12, 'mes', true, prevAll('ms-dep-mes'));
@@ -1367,8 +1368,8 @@ function renderIng(){
 
 /* ---------- EGRESOS ---------- */
 function renderEgr(){
-  const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), ano=msGet('ms-egr-ano'), mes=msGet('ms-egr-mes');
-  let rows = EGR.filter(r=>edi.has(r.dep||r.edificio)&&cpt.has(r.cptEgr)&&ano.has(r.ano)&&mes.has(r.mes));
+  const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), per=perGet('ms-egr-per');
+  let rows = EGR.filter(r=>edi.has(r.dep||r.edificio)&&cpt.has(r.cptEgr)&&per.has(r.mes+'/'+r.ano));
   const tot = rows.reduce((a,r)=>a+vEgr(r),0);
   const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrU,0);
   const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrA,0);
