@@ -1316,7 +1316,10 @@ function renderIng(){
   if(ACTIVOS.size){
     (sinFiltrarDep ? [...ACTIVOS] : [...dep2]).forEach(d=>{ if(d) byDep[d]=0; });
   }
-  rows.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
+  // Reclamos no es un departamento: suma a los totales de arriba (igual que el Power BI)
+  // pero se saca de los dos gráficos, que son para comparar deptos entre sí.
+  const rowsG = rows.filter(r=>!/reclamo/i.test(r.dep||''));
+  rowsG.forEach(r=>byDep[r.dep]=(byDep[r.dep]||0)+effIng(r));
   // los que estuvieron fuera de alquiler todo el período no compiten con el resto:
   // no es que no se alquilaron, es que no se podían alquilar
   const trabados = Object.keys(byDep).filter(d=>byDep[d]===0 && fueraDeAlquiler(d));
@@ -1353,7 +1356,7 @@ function renderIng(){
     [{label:'Ingresos',data:listaDep.map(e=>e[1]),
       backgroundColor:listaDep.map(e=>e[1]<=0 ? '#6b7280' : (ordenDep==='bot' ? '#d4af37' : '#CC1414')),
       borderRadius:6}]);
-  const byPla={}; rows.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+effIng(r));
+  const byPla={}; rowsG.forEach(r=>byPla[r.pla||'(sin)']=(byPla[r.pla||'(sin)']||0)+effIng(r));
   const plaE = Object.entries(byPla).sort((a,b)=>b[1]-a[1]);
   mkChart('ch-ing-pla','doughnut',plaE.map(e=>e[0]),[{data:plaE.map(e=>e[1]),backgroundColor:PALETTE,borderWidth:0}],{cutout:'62%'});
   const s=sortState.ing; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
