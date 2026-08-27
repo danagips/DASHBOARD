@@ -202,8 +202,8 @@ th.num{text-align:right}
   <nav>
     <button class="on" data-v="ing" onclick="setView('ing')">📈 Ingresos</button>
     <button data-v="egr" onclick="setView('egr')">📉 Egresos</button>
-    <button data-v="rec" onclick="setView('rec')">🛠 Resultado</button>
     <button data-v="dep" onclick="setView('dep')">🏢 Por Depto</button>
+    <button data-v="rec" onclick="setView('rec')">🛠 Resultado</button>
     <button data-v="bk" onclick="setView('bk')">🅱 Comisión Booking</button>
     <button data-v="con" onclick="setView('con')">⚖ Conciliación</button>
     <button data-v="ab" onclick="setView('ab')">🏠 Airbnb</button>
@@ -1482,21 +1482,18 @@ function renderEgr(){
   lastFiltered.egr = rows;
   const natA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
   const natU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
-  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X), tal cual el Excel`;
+  document.getElementById('t-egr-n').textContent = 'Detalle de egresos';
   document.getElementById('t-egr').innerHTML = `<table>
     <thead><tr>
       <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto</th>
-      <th onclick="sortTable('egr','edificio')">Edificio si no coincide</th>
-      <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
-      <th class="num" onclick="sortTable('egr','egrOrig')">Importe</th><th>Moneda</th>
+      <th onclick="sortTable('egr','cptEgr')">Concepto</th>
+      <th class="num" onclick="sortTable('egr','egrOrig')">Importe</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td>${r.fecha}</td><td><b>${r.dep||r.edificio}</b></td>
-      <td style="color:var(--neg)">${(String(r.edificio||'').trim().toLowerCase()!==String(r.dep||'').trim().toLowerCase()) ? (r.edificio||'(vacío)') : ''}</td>
-      <td>${r.cptEgr}</td><td>${r.detalle}</td>
-      <td class="num"><b>${fmt(r.egrOrig)}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">TOTAL (${rows.length})</td><td class="num">$ ${fmt(natA)} · u$s ${fmt(natU)}</td><td></td></tr></tfoot>
+      <td>${r.cptEgr}</td>
+      <td class="num"><b>${r.moneda==='USD'?'u$s':'$'} ${fmt(r.egrOrig)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">TOTAL (${rows.length})</td><td class="num">$ ${fmt(natA)} · u$s ${fmt(natU)}</td></tr></tfoot>
   </table>`;
 }
 
