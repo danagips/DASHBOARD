@@ -678,10 +678,14 @@ async function loadData(){
       const ingU = isUSD ? ing : (agU || (rate ? ing/rate : 0));
       const ingA = isUSD ? (ajA || (rate ? ing*rate : 0)) : ing;
 
-      // EGRESOS (col X, en valor absoluto) — conversión con las columnas del Excel o MEP
+      // EGRESOS (col X) — el SIGNO lo manda siempre la columna X y se respeta:
+      // negativo = gasto; positivo = plata que se le cobra al huésped y se le pasa al
+      // propietario restándole egresos (así no se le descuenta la comisión). Suma.
       const egrRaw = pn(g(r,'Egresos'));
-      const egrU = pn(g(r,'Egresos $ a u$')) || (isUSD ? Math.abs(egrRaw) : (rate ? Math.abs(egrRaw)/rate : 0));
-      const egrA = pn(g(r,'Egresos u$ a $')) || (!isUSD ? Math.abs(egrRaw) : (rate ? Math.abs(egrRaw)*rate : 0));
+      const sgnE = egrRaw < 0 ? -1 : 1;
+      const egrUx = pn(g(r,'Egresos $ a u$')), egrAx = pn(g(r,'Egresos u$ a $'));
+      const egrU = Math.abs(egrUx || (isUSD ? egrRaw : (rate ? egrRaw/rate : 0))) * sgnE;
+      const egrA = Math.abs(egrAx || (!isUSD ? egrRaw : (rate ? egrRaw*rate : 0))) * sgnE;
 
       // COMISIÓN BK: col K, moneda col L, a pesos/dólares vía MEP
       const com  = pn(g(r,'Comision BK'));
@@ -714,7 +718,7 @@ async function loadData(){
         edificio: g(r,'Edificio'),
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
-        ing, ingU, ingA, egrU: Math.abs(egrU), egrA: Math.abs(egrA), egrOrig: Math.abs(egrRaw), com, comU, comA,
+        ing, ingU, ingA, egrU, egrA, egrOrig: egrRaw, com, comU, comA,
         // fila en pesos que NO trae la conversión del Excel (col AG): se dolarizó con el
         // MEP por fecha. Es el único caso donde el número puede separarse del Power BI.
         sinAG: (!isUSD && ing!==0 && !agU), tcUsado: (!isUSD && ing!==0 && !agU) ? rate : 0,
@@ -1374,7 +1378,9 @@ function renderEgr(){
   const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrU,0);
   const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrA,0);
   const byCpt={}; rows.forEach(r=>byCpt[r.cptEgr||'(sin)']=(byCpt[r.cptEgr||'(sin)']||0)+vEgr(r));
-  const cptE = Object.entries(byCpt).sort((a,b)=>b[1]-a[1]);
+  // los egresos son negativos: el gasto más grande es el MÁS negativo, así que se
+  // ordena de menor a mayor para que el top sean los que más se gastaron
+  const cptE = Object.entries(byCpt).sort((a,b)=>a[1]-b[1]);
   document.getElementById('k-egr').innerHTML = `
     <div class="kpi"><div class="t">Egresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
     <div class="kpi"><div class="t">Pagado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
@@ -1383,7 +1389,7 @@ function renderEgr(){
     <div class="kpi"><div class="t">Mayor concepto</div><div class="v" style="font-size:16px">${cptE[0]?cptE[0][0]:'—'}</div><div class="s">${cptE[0]?fmtM(cptE[0][1]):''}</div></div>`;
   mkChart('ch-egr-cpt','bar',cptE.slice(0,12).map(e=>e[0]),[{label:'Egresos',data:cptE.slice(0,12).map(e=>e[1]),backgroundColor:'#d4af37',borderRadius:6}],{indexAxis:'y'});
   const byEdi={}; rows.forEach(r=>{const k=r.dep||r.edificio||'(sin)'; byEdi[k]=(byEdi[k]||0)+vEgr(r);});
-  const ediE = Object.entries(byEdi).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const ediE = Object.entries(byEdi).sort((a,b)=>a[1]-b[1]).slice(0,12);
   mkChart('ch-egr-edi','bar',ediE.map(e=>e[0]),[{label:'Egresos',data:ediE.map(e=>e[1]),backgroundColor:'#CC1414',borderRadius:6}]);
   const s=sortState.egr; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.egr = rows;
@@ -1414,7 +1420,7 @@ function renderDep(){
   const eRows = EGR.filter(r=>dep.has(r.dep||r.edificio)&&ano.has(r.ano)&&mes.has(r.mes));
   const totI = iRows.reduce((a,r)=>a+effIng(r),0);
   const totE = eRows.reduce((a,r)=>a+vEgr(r),0);
-  const totR = totI-totE;
+  const totR = totI+totE;   // los egresos ya vienen con signo negativo
   const noches = iRows.reduce((a,r)=>a+r.noches,0);
   document.getElementById('k-dep').innerHTML = `
     <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
@@ -1426,7 +1432,7 @@ function renderDep(){
   const agg = {};
   iRows.forEach(r=>{ const a=agg[r.dep]=agg[r.dep]||{dep:r.dep,ing:0,egr:0,n:0,noches:0}; a.ing+=effIng(r); a.n++; a.noches+=r.noches; });
   eRows.forEach(r=>{ const k=r.dep||r.edificio; const a=agg[k]=agg[k]||{dep:k,ing:0,egr:0,n:0,noches:0}; a.egr+=vEgr(r); });
-  let list = Object.values(agg).map(a=>({...a, res:a.ing-a.egr, margen:a.ing?((a.ing-a.egr)/a.ing*100):0}));
+  let list = Object.values(agg).map(a=>({...a, res:a.ing+a.egr, margen:a.ing?((a.ing+a.egr)/a.ing*100):0}));
   const s=sortState.dep; list.sort((a,b)=>cmp(a,b,s.key,s.asc));
   lastFiltered.dep = list;
   // chart resultado por depto
@@ -1514,8 +1520,8 @@ function renderCon(){
   const keys = Object.keys(byM).sort(spMesAno);
   const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m]+' '+y});
   const ings = keys.map(k=>byM[k].ing), egrs = keys.map(k=>byM[k].egr);
-  const res = keys.map((k,i)=>ings[i]-egrs[i]);
-  const totI = ings.reduce((a,b)=>a+b,0), totE = egrs.reduce((a,b)=>a+b,0), totR = totI-totE;
+  const res = keys.map((k,i)=>ings[i]+egrs[i]);   // los egresos ya vienen negativos
+  const totI = ings.reduce((a,b)=>a+b,0), totE = egrs.reduce((a,b)=>a+b,0), totR = totI+totE;
   const margen = totI ? (totR/totI*100) : 0;
   document.getElementById('k-con').innerHTML = `
     <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
