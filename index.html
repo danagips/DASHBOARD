@@ -251,6 +251,7 @@ th.num{text-align:right}
       <div class="f"><label>Concepto</label><div class="ms" id="ms-egr-cpt"></div></div>
     </div>
     <div class="kpis" id="k-egr"></div>
+    <div id="k-egr2"></div>
     <div class="grid2">
       <div class="card"><h3>Egresos por concepto</h3><div class="ch"><canvas id="ch-egr-cpt"></canvas></div></div>
       <div class="card"><h3>Egresos por depto / edificio</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
@@ -719,6 +720,8 @@ async function loadData(){
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
         ing, ingU, ingA, egrU, egrA, egrOrig: egrRaw, com, comU, comA,
+        // crudos, para el control de carga de Egresos (col L y col V sin reemplazos)
+        monedaRaw, cptEgrRaw: g(r,'Concepto Egresos'), fechaA: g(r,'Fecha'), fechaF: g(r,'Fecha de ingreso'),
         // fila en pesos que NO trae la conversión del Excel (col AG): se dolarizó con el
         // MEP por fecha. Es el único caso donde el número puede separarse del Power BI.
         sinAG: (!isUSD && ing!==0 && !agU), tcUsado: (!isUSD && ing!==0 && !agU) ? rate : 0,
@@ -1374,6 +1377,58 @@ function renderIng(){
 function renderEgr(){
   const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), per=perGet('ms-egr-per');
   let rows = EGR.filter(r=>edi.has(r.dep||r.edificio)&&cpt.has(r.cptEgr)&&per.has(r.mes+'/'+r.ano));
+
+  /* ---- CONTROL DE CARGA: cuatro reglas que siempre se tienen que cumplir ----
+     Se mira sobre las filas CRUDAS del Excel (no las ya repartidas por edificio),
+     así también entran las que no tienen departamento y no llegan a la tabla. */
+  const crud = ROWS.filter(r => r.egrOrig!==0 && per.has(r.mes+'/'+r.ano));
+  const igual = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase();
+  const malFecha = crud.filter(r => !igual(r.fechaF, r.fechaA));
+  const malEdif  = crud.filter(r => !igual(r.edificio, r.dep));
+  const sinMon   = crud.filter(r => !String(r.monedaRaw||'').trim());
+  const sinCpt   = crud.filter(r => !String(r.cptEgrRaw||'').trim());
+  // movimientos internos (plata que va de una cuenta a otra): NO llevan departamento
+  const esMov = r => /transferenc|trasferenc|venta\s*usd|compra\s*usd/i.test(r.cptEgrRaw||'');
+  const sinDep = crud.filter(r => !String(r.dep||'').trim() && !String(r.edificio||'').trim() && !esMov(r));
+  const sinDepConCpt = sinDep.filter(r => String(r.cptEgrRaw||'').trim());
+  const nCtrl = malFecha.length + malEdif.length + sinMon.length + sinCpt.length + sinDep.length;
+  const lin = (r, extra) => `<div class="aviLin">• <b>${r.dep||r.edificio||'(sin depto)'}</b>
+    ${r.fechaA||''} — ${fmt(r.egrOrig)} ${r.moneda==='USD'?'u$s':'$'} <span>· ${extra}</span></div>`;
+  const corte = (a, f) => a.slice(0,12).map(f).join('') +
+    (a.length>12 ? `<div class="aviLin"><span>…y ${a.length-12} más</span></div>` : '');
+  document.getElementById('k-egr2').innerHTML = nCtrl ? `
+    <div class="avi" id="aviEgr">
+      <div class="debTop" onclick="document.getElementById('aviEgr').classList.toggle('on')">
+        <div>
+          <div class="debTit">Cosas para revisar</div>
+          <div class="debVal">${nCtrl} <small>${nCtrl===1?'fila con algo mal cargado':'filas con algo mal cargado'}</small></div>
+        </div>
+        <button class="debVer">Ver el detalle ▾</button>
+      </div>
+      <div class="debDet">
+        ${sinDep.length?`<div class="aviTit">Egresos sin departamento asignado — ${sinDep.length}</div>
+          ${sinDepConCpt.length ? corte(sinDepConCpt, r=>`<div class="aviLin">• <b>${r.cptEgrRaw}</b>
+            ${r.fechaA||''} — ${fmt(r.egrOrig)} ${r.moneda==='USD'?'u$s':'$'}
+            <span>· no se le imputa a ningún depto, así que no aparece en ningún lado</span></div>`) : ''}
+          ${sinDep.length-sinDepConCpt.length ? `<div class="aviLin"><span>Otras ${sinDep.length-sinDepConCpt.length}
+            tampoco tienen concepto (van listadas más abajo).</span></div>` : ''}
+          <div class="aviLin"><span>No se cuentan las transferencias ni las compras y ventas de dólares,
+            que por ser movimientos entre cuentas no llevan departamento.</span></div>`:''}
+        ${malEdif.length?`<div class="aviTit">El Edificio (col U) no coincide con el Departamento (col B) — ${malEdif.length}</div>
+          ${corte(malEdif, r=>lin(r, `dice <b>${r.dep||'(vacío)'}</b> en Departamento y <b>${r.edificio||'(vacío)'}</b> en Edificio`))}`:''}
+        ${malFecha.length?`<div class="aviTit">La Fecha de ingreso (col F) no coincide con la Fecha (col A) — ${malFecha.length}</div>
+          ${corte(malFecha, r=>lin(r, `col A: ${r.fechaA||'(vacía)'} · col F: ${r.fechaF||'(vacía)'}`))}`:''}
+        ${sinMon.length?`<div class="aviTit">Sin moneda cargada (col L) — ${sinMon.length}</div>
+          ${corte(sinMon, r=>lin(r, `no dice si es en pesos o en dólares`))}`:''}
+        ${sinCpt.length?`<div class="aviTit">Sin concepto de egreso (col V) — ${sinCpt.length}</div>
+          ${sinCpt.filter(r=>r.dep||r.edificio).length
+            ? corte(sinCpt.filter(r=>r.dep||r.edificio), r=>lin(r,'falta el concepto'))
+            : ''}
+          ${sinCpt.filter(r=>!r.dep&&!r.edificio).length ? `<div class="aviLin"><span>${sinCpt.filter(r=>!r.dep&&!r.edificio).length} de estas
+            tampoco tienen departamento, así que no entran a esta solapa.</span></div>` : ''}`:''}
+      </div>
+    </div>` : '';
+
   const tot = rows.reduce((a,r)=>a+vEgr(r),0);
   const totUSD = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrU,0);
   const totARS = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrA,0);
