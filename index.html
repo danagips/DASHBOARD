@@ -1390,8 +1390,17 @@ function renderEgr(){
     if(prevE && !prevE.some(d=>depsMes.includes(d))) prevE = null;
     makeMS('ms-egr-edi', depsMes, 'edi', true, prevE);
   }
-  const edi2 = msGet('ms-egr-edi');
-  let rows = EGR_CRUDO.filter(r=>edi2.has(r.dep)&&cpt.has(r.cptEgr)&&enPerE(r));
+  // el desplegable de Concepto, igual: solo los conceptos que aparecen en el período
+  const cptMes = [...new Set(EGR_CRUDO.filter(enPerE).map(r=>r.cptEgr))].filter(Boolean);
+  const msC = msState['ms-egr-cpt'];
+  const distintoC = !msC || msC.vals.length!==cptMes.length || cptMes.some(c=>!msC.vals.includes(c));
+  if(distintoC){
+    let prevC = (msC && msC.sel.size!==msC.vals.length) ? [...msC.sel] : null;
+    if(prevC && !prevC.some(c=>cptMes.includes(c))) prevC = null;
+    makeMS('ms-egr-cpt', cptMes, 'cpt', true, prevC);
+  }
+  const edi2 = msGet('ms-egr-edi'), cpt2 = msGet('ms-egr-cpt');
+  let rows = EGR_CRUDO.filter(r=>edi2.has(r.dep)&&cpt2.has(r.cptEgr)&&enPerE(r));
 
   /* ---- CONTROL DE CARGA: cuatro reglas que siempre se tienen que cumplir ----
      Se mira sobre las filas CRUDAS del Excel (no las ya repartidas por edificio),
