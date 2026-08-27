@@ -424,7 +424,7 @@ function pn(v){
 function fmt(n){
   const neg = n<0; n = Math.abs(n);
   const s = n.toLocaleString('es-AR',{minimumFractionDigits:0, maximumFractionDigits:0});
-  return (neg?'-':'') + s;
+  return (neg && s!=='0' ? '-' : '') + s;   // que un importe que redondea a cero no salga "-0" 
 }
 function fmtM(n){ return (CUR==='USD' ? 'u$s ' : '$ ') + fmt(n); }
 function parseCSV(text){
@@ -1471,11 +1471,9 @@ function renderEgr(){
   // ordena de menor a mayor para que el top sean los que más se gastaron
   const cptE = Object.entries(byCpt).sort((a,b)=>a[1]-b[1]);
   document.getElementById('k-egr').innerHTML = `
-    <div class="kpi"><div class="t">Egresos totales (${CUR==='USD'?'u$s':'AR$'})</div><div class="v red">${fmtM(tot)}</div></div>
+    <div class="kpi"><div class="t">Egresos</div><div class="v red">$ ${fmt(totARS)}</div></div>
     <div class="kpi"><div class="t">Pagado en u$s</div><div class="v gold">u$s ${fmt(totUSD)}</div></div>
-    <div class="kpi"><div class="t">Pagado en AR$</div><div class="v">$ ${fmt(totARS)}</div></div>
-    <div class="kpi"><div class="t">Movimientos</div><div class="v">${rows.length}</div></div>
-    <div class="kpi"><div class="t">Mayor concepto</div><div class="v" style="font-size:16px">${cptE[0]?cptE[0][0]:'—'}</div><div class="s">${cptE[0]?fmtM(cptE[0][1]):''}</div></div>`;
+    <div class="kpi"><div class="t">Total de egresos en u$s</div><div class="v red">u$s ${fmt(tot)}</div></div>`;
   mkChart('ch-egr-cpt','bar',cptE.slice(0,12).map(e=>e[0]),[{label:'Egresos',data:cptE.slice(0,12).map(e=>e[1]),backgroundColor:'#d4af37',borderRadius:6}],{indexAxis:'y'});
   const byEdi={}; rows.forEach(r=>{const k=r.dep||r.edificio||'(sin)'; byEdi[k]=(byEdi[k]||0)+vEgr(r);});
   const ediE = Object.entries(byEdi).sort((a,b)=>a[1]-b[1]).slice(0,12);
