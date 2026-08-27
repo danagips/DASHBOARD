@@ -455,7 +455,7 @@ function spMesAno(a,b){ const [ma,ya]=a.split('/').map(Number), [mb,yb]=b.split(
 
 /* ================= DATA ================= */
 let ROWS = [];
-let ING=[], EGR=[], BK=[], RECL=[], ABNB=[];
+let ING=[], EGR=[], BK=[], RECL=[], ABNB=[], EGR_CRUDO=[];
 let CUR = 'USD';   // moneda fija: se sacó el selector u$s / AR$ del encabezado
 let charts = {};
 let msState = {};
@@ -755,6 +755,10 @@ async function loadData(){
       }
       EGR.push(r);
     }
+    // Lo que ve la solapa EGRESOS: cada fila tal como está cargada, con el departamento
+    // de la columna B, sin repartir los gastos de edificio y sin filtrar por activo/inactivo.
+    // (El reparto y el filtro de activos siguen vivos en EGR, que usan Por Depto y Conciliación.)
+    EGR_CRUDO = ROWS.filter(r => (r.egrU!==0 || r.egrA!==0) && !esReclamo(r) && String(r.dep||'').trim());
     RECL = ROWS.filter(r=>esReclamo(r) && (r.egrOrig!==0 || r.ing!==0));
     BK  = ROWS.filter(r=>r.com!==0);
     // Airbnb: reservas por plataforma (col C) que aún no se acreditaron (col Q vacía)
@@ -962,11 +966,11 @@ function buildFilters(){
   const arbolIng = {};
   ING.forEach(r=>{ if(r.ano&&r.mes){ (arbolIng[r.ano] = arbolIng[r.ano] || new Set()).add(r.mes); } });
   makePer('ms-ing-per', arbolIng, perState['ms-ing-per'] ? [...perState['ms-ing-per'].sel] : null);
-  makeMS('ms-egr-edi', EGR.map(r=>r.dep||r.edificio), 'edi', true, prevAll('ms-egr-edi'));
-  makeMS('ms-egr-cpt', EGR.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
+  makeMS('ms-egr-edi', EGR_CRUDO.map(r=>r.dep), 'edi', true, prevAll('ms-egr-edi'));
+  makeMS('ms-egr-cpt', EGR_CRUDO.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
   // Período (año ▸ meses), igual que en Ingresos
   const arbolEgr = {};
-  EGR.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
+  EGR_CRUDO.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
   makePer('ms-egr-per', arbolEgr, perState['ms-egr-per'] ? [...perState['ms-egr-per'].sel] : null);
   makeMS('ms-dep-dep', depsAll, 'dep', true, prevAll('ms-dep-dep'));
   makeMS('ms-dep-ano', anosAll, 'ano', false, prevY('ms-dep-ano')||[curY]);
@@ -1376,7 +1380,18 @@ function renderIng(){
 /* ---------- EGRESOS ---------- */
 function renderEgr(){
   const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), per=perGet('ms-egr-per');
-  let rows = EGR.filter(r=>edi.has(r.dep||r.edificio)&&cpt.has(r.cptEgr)&&per.has(r.mes+'/'+r.ano));
+  // el desplegable lista SOLO los deptos con egresos en el período elegido
+  const enPerE = r => per.has(r.mes+'/'+r.ano);
+  const depsMes = [...new Set(EGR_CRUDO.filter(enPerE).map(r=>r.dep))].filter(Boolean);
+  const msE = msState['ms-egr-edi'];
+  const distintoE = !msE || msE.vals.length!==depsMes.length || depsMes.some(d=>!msE.vals.includes(d));
+  if(distintoE){
+    let prevE = (msE && msE.sel.size!==msE.vals.length) ? [...msE.sel] : null;
+    if(prevE && !prevE.some(d=>depsMes.includes(d))) prevE = null;
+    makeMS('ms-egr-edi', depsMes, 'edi', true, prevE);
+  }
+  const edi2 = msGet('ms-egr-edi');
+  let rows = EGR_CRUDO.filter(r=>edi2.has(r.dep)&&cpt.has(r.cptEgr)&&enPerE(r));
 
   /* ---- CONTROL DE CARGA: cuatro reglas que siempre se tienen que cumplir ----
      Se mira sobre las filas CRUDAS del Excel (no las ya repartidas por edificio),
@@ -1391,7 +1406,15 @@ function renderEgr(){
   const esMov = r => /transferenc|trasferenc|venta\s*usd|compra\s*usd/i.test(r.cptEgrRaw||'');
   const sinDep = crud.filter(r => !String(r.dep||'').trim() && !String(r.edificio||'').trim() && !esMov(r));
   const sinDepConCpt = sinDep.filter(r => String(r.cptEgrRaw||'').trim());
-  const nCtrl = malFecha.length + malEdif.length + sinMon.length + sinCpt.length + sinDep.length;
+  // departamentos marcados INACTIVOS que igual tuvieron egresos este mes
+  const inactEgr = crud.filter(r => {
+    const d = String(r.dep||'').trim();
+    if(!d || /reclamo/i.test(d) || !ACTIVOS.size) return false;
+    if(EDIF.has(d.toLowerCase())) return false;      // los edificios no figuran como activos
+    return !ACTIVOS.has(d);
+  });
+  const nCtrl = malFecha.length + malEdif.length + sinMon.length + sinCpt.length
+              + sinDep.length + inactEgr.length;
   const lin = (r, extra) => `<div class="aviLin">• <b>${r.dep||r.edificio||'(sin depto)'}</b>
     ${r.fechaA||''} — ${fmt(r.egrOrig)} ${r.moneda==='USD'?'u$s':'$'} <span>· ${extra}</span></div>`;
   const corte = (a, f) => a.slice(0,12).map(f).join('') +
@@ -1406,6 +1429,8 @@ function renderEgr(){
         <button class="debVer">Ver el detalle ▾</button>
       </div>
       <div class="debDet">
+        ${inactEgr.length?`<div class="aviTit">Departamentos marcados inactivos que tuvieron egresos — ${inactEgr.length}</div>
+          ${corte(inactEgr, r=>lin(r, `<b>${r.dep}</b> figura inactivo en el Excel pero se le cargó este gasto`))}`:''}
         ${sinDep.length?`<div class="aviTit">Egresos sin departamento asignado — ${sinDep.length}</div>
           ${sinDepConCpt.length ? corte(sinDepConCpt, r=>`<div class="aviLin">• <b>${r.cptEgrRaw}</b>
             ${r.fechaA||''} — ${fmt(r.egrOrig)} ${r.moneda==='USD'?'u$s':'$'}
@@ -1450,17 +1475,17 @@ function renderEgr(){
   lastFiltered.egr = rows;
   const natA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
   const natU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
-  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X) · gastos de edificio ya divididos`;
+  document.getElementById('t-egr-n').textContent = `Detalle de egresos (${rows.length}) · importes en moneda de origen (col X), tal cual el Excel`;
   document.getElementById('t-egr').innerHTML = `<table>
     <thead><tr>
       <th onclick="sortTable('egr','fecha')">Fecha</th><th onclick="sortTable('egr','dep')">Depto</th>
-      <th onclick="sortTable('egr','edificio')">Edificio (origen)</th>
+      <th onclick="sortTable('egr','edificio')">Edificio si no coincide</th>
       <th onclick="sortTable('egr','cptEgr')">Concepto</th><th onclick="sortTable('egr','detalle')">Detalle</th>
       <th class="num" onclick="sortTable('egr','egrOrig')">Importe</th><th>Moneda</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td>${r.fecha}</td><td><b>${r.dep||r.edificio}</b></td>
-      <td style="color:var(--muted)">${r.esParte?`${r.edificio} ÷${r.divisor}`:''}</td>
+      <td style="color:var(--neg)">${(String(r.edificio||'').trim().toLowerCase()!==String(r.dep||'').trim().toLowerCase()) ? (r.edificio||'(vacío)') : ''}</td>
       <td>${r.cptEgr}</td><td>${r.detalle}</td>
       <td class="num"><b>${fmt(r.egrOrig)}</b></td>
       <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
