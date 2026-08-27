@@ -252,13 +252,13 @@ th.num{text-align:right}
     </div>
     <div class="kpis" id="k-egr"></div>
     <div id="k-egr2"></div>
-    <div class="grid2">
-      <div class="card"><h3>Egresos por concepto</h3><div class="ch"><canvas id="ch-egr-cpt"></canvas></div></div>
-      <div class="card"><h3>Egresos por depto / edificio</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
-    </div>
     <div class="tblCard">
       <div class="tblHead"><h3 id="t-egr-n">Detalle de egresos</h3><button class="hbtn" onclick="expCSV('egr')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-egr"></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Egresos por concepto</h3><div class="ch"><canvas id="ch-egr-cpt"></canvas></div></div>
+      <div class="card"><h3>Egresos por depto / edificio</h3><div class="ch"><canvas id="ch-egr-edi"></canvas></div></div>
     </div>
   </div>
 
@@ -822,7 +822,7 @@ function msRender(id, filter=''){
   const bt = document.getElementById(id+'-todos');
   if(bt) bt.textContent = (s.sel.size===s.vals.length) ? 'Destildar todos' : `Tildar todos (${s.vals.length})`;
   const lbl = document.getElementById(id+'-lbl');
-  if(s.sel.size===s.vals.length) lbl.textContent = (s.label==='pla') ? 'Todos' : `Todos (${s.vals.length})`;
+  if(s.sel.size===s.vals.length) lbl.textContent = (s.label==='pla'||s.label==='cpt') ? 'Todos' : `Todos (${s.vals.length})`;
   else if(s.sel.size===0) lbl.textContent = 'Ninguno';
   else if(s.sel.size===1){ const v=[...s.sel][0]; lbl.textContent = s.label==='mes'?(MESES[v]||v):v; }
   else lbl.textContent = `${s.sel.size} seleccionados`;
