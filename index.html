@@ -352,12 +352,24 @@ tr.grp td .gn{color:var(--muted);font-weight:600;font-size:12px}
 
   <div class="view" id="v-rec">
     <div class="filters">
-      <div class="f"><label>Año</label><div class="ms" id="ms-rec-ano"></div></div>
-      <div class="f"><label>Mes</label><div class="ms" id="ms-rec-mes"></div></div>
+      <div class="f"><label>Moneda</label>
+        <div class="segs">
+          <button id="resU" class="on" onclick="liqCur('USD')">u$s</button>
+          <button id="resA" onclick="liqCur('ARS')">$</button>
+        </div>
+      </div>
+      <div class="f"><label>Período</label><div class="ms per" id="ms-rec-per"></div></div>
     </div>
+    <div class="liqBan" id="res-ban"></div>
+    <div class="liqCard" id="res-card"></div>
     <div class="kpis" id="k-rec"></div>
+    <div class="tblCard" style="margin-bottom:18px">
+      <div class="tblHead"><h3 id="t-res-n">Resultado mes a mes</h3><button class="hbtn" onclick="expCSV('res')">⬇ CSV</button></div>
+      <div class="tblWrap" id="t-res"></div>
+    </div>
+    <div class="card" style="margin-bottom:18px"><h3>Cómo viene evolucionando</h3><div class="ch"><canvas id="ch-res-mes"></canvas></div></div>
     <div class="tblCard">
-      <div class="tblHead"><h3 id="t-rec-n">Detalle de reclamos</h3><button class="hbtn" onclick="expCSV('rec')">⬇ CSV</button></div>
+      <div class="tblHead"><h3 id="t-rec-n">Movimientos de Reclamos</h3><button class="hbtn" onclick="expCSV('rec')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-rec"></div>
     </div>
   </div>
@@ -488,7 +500,7 @@ let ING=[], EGR=[], BK=[], RECL=[], ABNB=[], EGR_CRUDO=[];
 let CUR = 'USD';   // moneda fija: se sacó el selector u$s / AR$ del encabezado
 let charts = {};
 let msState = {};
-let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[]};
+let lastFiltered = {ing:[],egr:[],bk:[],con:[],dep:[],rec:[],res:[]};
 
 let MEP = [];       // [{s: serial yyyymmdd, rate}] ordenado
 let SIN_FECHA = []; // ingresos sin fecha de ingreso (col F vacía)
@@ -1073,8 +1085,7 @@ function buildFilters(){
   makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro', true, prevAll('ms-bk-pro'));
   makeMS('ms-bk-ano', anosAll, 'ano', false, prevY('ms-bk-ano')||[curY]);
   makeMS('ms-bk-mes', M12, 'mes', true, prevAll('ms-bk-mes'));
-  makeMS('ms-rec-ano', anosAll, 'ano', false, prevY('ms-rec-ano')||[curY]);
-  makeMS('ms-rec-mes', M12, 'mes', true, prevAll('ms-rec-mes'));
+  makePer('ms-rec-per', arbolDep, perState['ms-rec-per'] ? [...perState['ms-rec-per'].sel] : null);
   makeMS('ms-con-ano', anosAll, 'ano', false, prevY('ms-con-ano')||[curY]);
   makeMS('ms-ab-don', ABNB.map(r=>r.donde||'(sin cuenta)'), 'don', true, prevAll('ms-ab-don'));
   makeMS('ms-ab-dep', ABNB.map(r=>r.dep||'(sin depto)'), 'dep', true, prevAll('ms-ab-dep'));
@@ -1225,32 +1236,141 @@ function renderAb(){
   </table>`;
 }
 
-/* ---------- RESULTADO (Reclamos) ---------- */
+/* ---------- RESULTADO DE LA EMPRESA ----------
+   Lo que le queda a Rent2888 después de liquidarle a todos los propietarios:
+     + la comisión del 20% de cada propietario
+     + el sobrante del reparto de Monta e Italiano (el Excel divide por menos deptos de
+       los que después se cobran: esa diferencia queda para la empresa, es a propósito)
+     + los ingresos cargados al departamento "Reclamos", que es la empresa
+       (ahí adentro va también lo que sobra de Booking después de pagarle la factura)
+     − los gastos cargados a "Reclamos"                                                  */
+const esRecl = r => /reclamo/i.test(String(r.dep||r.edificio||''));
+
+/* Se arman los totales de cada mes en UNA sola pasada por las 76.000 filas. Después
+   elegir un mes o doce es sólo sumar casilleros, y la tabla de abajo sale instantánea. */
+function resBaldes(){
+  const B = {};
+  const balde = k => B[k] = B[k] || {baseCom:0, ingR:0, egrR:0, edif:{}, recl:[]};
+  for(const r of ROWS){
+    if(!r.mes || !r.ano) continue;
+    if(r.ing===0 && r.egrOrig===0 && r.abOrig===0) continue;
+    const k = r.mes+'/'+r.ano, b = balde(k);
+    if(esRecl(r)){
+      if(r.ing!==0 || r.egrOrig!==0){ b.ingR += liqIng(r); b.egrR += liqEgr(r); b.recl.push(r); }
+      continue;
+    }
+    const edi = String(r.dep||'').toLowerCase();
+    if(LIQ_EDIF[edi] && r.abOrig!==0){
+      const e = b.edif[edi] = b.edif[edi] || {gasto:0, unit:0};
+      e.gasto += liqEgr(r); e.unit += liqAb(r);
+      continue;
+    }
+    if(r.ing!==0 && DEP2PROP[r.dep]) b.baseCom += liqIng(r);
+  }
+  return B;
+}
+function resCalc(periodos, baldes){
+  const B = baldes || resBaldes();
+  let baseCom=0, ingR=0, egrR=0, sobra=0, recl=[];
+  const porEdi = {};
+  for(const k of periodos){
+    const b = B[k]; if(!b) continue;
+    baseCom += b.baseCom; ingR += b.ingR; egrR += b.egrR; recl = recl.concat(b.recl);
+    // el sobrante depende de cuántos deptos pagan ESE mes (los trabados no pagan)
+    for(const edi in b.edif){
+      const traba = liqTrabaDe(k);
+      const cuantos = LIQ_EDIF[edi].filter(d=>!traba.has(d)).length;
+      const e = porEdi[edi] = porEdi[edi] || {gasto:0, cobrado:0};
+      e.gasto += b.edif[edi].gasto;
+      e.cobrado += b.edif[edi].unit*cuantos;
+    }
+  }
+  const sobraDet = [];
+  for(const edi in porEdi){
+    const dif = porEdi[edi].gasto - porEdi[edi].cobrado;   // ambos negativos: la resta da positiva
+    sobra += dif;
+    sobraDet.push({edi: edi.charAt(0).toUpperCase()+edi.slice(1), ...porEdi[edi], dif});
+  }
+  const com = baseCom*LIQ_COM;
+  return {baseCom, com, sobra, sobraDet, ingR, egrR, recl, total: com+sobra+ingR+egrR};
+}
+
 function renderRec(){
-  const ano=msGet('ms-rec-ano'), mes=msGet('ms-rec-mes');
-  let rows = RECL.filter(r=>ano.has(r.ano)&&mes.has(r.mes));
-  const totA = rows.filter(r=>r.moneda==='ARS').reduce((a,r)=>a+r.egrOrig,0);
-  const totU = rows.filter(r=>r.moneda==='USD').reduce((a,r)=>a+r.egrOrig,0);
+  const per = perState['ms-rec-per'] ? perState['ms-rec-per'].sel : new Set();
+  const lbl = document.getElementById('ms-rec-per-lbl');
+  const perTxt = lbl ? lbl.textContent : '';
+  const B = resBaldes();
+  const R = resCalc(per, B);
+
+  document.getElementById('res-ban').innerHTML = `
+    <div><div class="marca">Rent<span>2888</span></div>
+      <div class="lbl" style="margin-top:5px">Resultado de la empresa · ${LIQ_CUR==='USD'?'dólares':'pesos'}</div></div>
+    <div class="tot"><div class="lbl">Le queda a la empresa</div>
+      <div class="totV ${R.total<0?'neg':''}">${liqN(R.total)}</div></div>`;
+
+  document.getElementById('res-card').innerHTML = `
+    <div class="liqName">${perTxt}</div>
+    <div class="liqSub">Es lo que sobra después de liquidarle a todos los propietarios.
+      Los ${fmt(LIQ_COM*100)}% se calculan sobre ${liqN(R.baseCom)} de ingresos.</div>`;
+
   document.getElementById('k-rec').innerHTML = `
-    <div class="kpi"><div class="t">Reclamos en AR$</div><div class="v red">$ ${fmt(totA)}</div></div>
-    <div class="kpi"><div class="t">Reclamos en u$s</div><div class="v gold">u$s ${fmt(totU)}</div></div>
-    <div class="kpi"><div class="t">Movimientos</div><div class="v">${rows.length}</div></div>`;
-  const s=sortState.rec; rows=[...rows].sort((a,b)=>cmp(a,b,s.key,s.asc));
+    <div class="kpi"><div class="t">Comisión 20%</div><div class="v pos">${liqN(R.com)}</div></div>
+    <div class="kpi"><div class="t">Sobrante Monta e Italiano</div><div class="v ${R.sobra>=0?'pos':'red'}">${liqN(R.sobra)}</div>
+      <div class="s">${R.sobraDet.map(d=>d.edi).join(' · ')||'sin gastos de edificio'}</div></div>
+    <div class="kpi"><div class="t">Ingresos de Reclamos</div><div class="v pos">${liqN(R.ingR)}</div></div>
+    <div class="kpi"><div class="t">Gastos de Reclamos</div><div class="v red">${liqN(R.egrR)}</div></div>`;
+
+  // ---- tabla mes a mes ----
+  const meses = Object.keys(B).sort(spMesAno);
+  const serie = meses.map(k=>{ const x = resCalc(new Set([k]), B); return {k, ...x}; });
+  const elegido = new Set([...per]);
+  lastFiltered.res = serie.map(s=>{
+    const [m,y] = s.k.split('/');
+    return {mes: MESES[+m]+' '+y, com:s.com, sobra:s.sobra, ingR:s.ingR, egrR:s.egrR, total:s.total};
+  });
+  const tot = k => serie.reduce((a,s)=>a+s[k],0);
+  document.getElementById('t-res-n').textContent = 'Resultado mes a mes';
+  document.getElementById('t-res').innerHTML = `<table>
+    <thead><tr><th>Mes</th><th class="num">Comisión 20%</th><th class="num">Sobrante edificios</th>
+      <th class="num">Ingresos Reclamos</th><th class="num">Gastos Reclamos</th><th class="num">Resultado</th></tr></thead>
+    <tbody>${serie.map((s,i)=>`<tr${elegido.has(s.k)?' style="background:rgba(204,20,20,.10)"':''}>
+      <td><b>${lastFiltered.res[i].mes}</b></td>
+      <td class="num" style="color:var(--green)">${fmt(s.com)}</td>
+      <td class="num" style="color:${s.sobra>=0?'var(--green)':'var(--neg)'}">${fmt(s.sobra)}</td>
+      <td class="num" style="color:var(--green)">${fmt(s.ingR)}</td>
+      <td class="num" style="color:var(--neg)">${fmt(s.egrR)}</td>
+      <td class="num"><b style="color:${s.total>=0?'var(--green)':'var(--neg)'}">${fmt(s.total)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td class="num">${fmt(tot('com'))}</td><td class="num">${fmt(tot('sobra'))}</td>
+      <td class="num">${fmt(tot('ingR'))}</td><td class="num">${fmt(tot('egrR'))}</td>
+      <td class="num">${fmt(tot('total'))}</td></tr></tfoot>
+  </table>`;
+
+  mkChart('ch-res-mes','bar', meses.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)}),
+    [{label:'Resultado', data:serie.map(s=>s.total),
+      backgroundColor: meses.map((k,i)=> elegido.has(k) ? '#CC1414' : (serie[i].total>=0 ? 'rgba(46,204,113,.55)' : 'rgba(255,92,92,.55)')),
+      borderRadius:5}],
+    {plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+liqN(c.parsed.y)}}}});
+
+  // ---- detalle de los movimientos de Reclamos del período elegido ----
+  let rows = [...R.recl];
+  const s2 = sortState.rec; rows.sort((a,b)=>cmp(a,b,s2.key,s2.asc));
   lastFiltered.rec = rows;
-  document.getElementById('t-rec-n').textContent = `Detalle de reclamos (${rows.length})`;
-  document.getElementById('t-rec').innerHTML = `<table>
+  document.getElementById('t-rec-n').textContent = `Movimientos de Reclamos (${rows.length})`;
+  document.getElementById('t-rec').innerHTML = rows.length ? `<table>
     <thead><tr>
       <th onclick="sortTable('rec','fecha')">Fecha</th>
       <th onclick="sortTable('rec','cptEgr')">Concepto</th>
       <th onclick="sortTable('rec','detalle')">Detalle</th>
-      <th class="num" onclick="sortTable('rec','egrOrig')">Importe (col X)</th><th>Moneda</th>
+      <th class="num" onclick="sortTable('rec','ing')">Entra</th>
+      <th class="num" onclick="sortTable('rec','egrOrig')">Sale</th>
     </tr></thead>
     <tbody>${rows.map(r=>`<tr>
-      <td>${r.fecha}</td><td>${r.cptEgr}</td><td>${r.detalle}</td>
-      <td class="num"><b>${fmt(r.egrOrig)}</b></td>
-      <td><span class="pill ${r.moneda==='USD'?'usd':'ars'}">${r.moneda==='USD'?'u$s':'AR$'}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="3">TOTAL (${rows.length})</td><td class="num">$ ${fmt(totA)} · u$s ${fmt(totU)}</td><td></td></tr></tfoot>
-  </table>`;
+      <td>${r.fecha}</td><td>${r.cptEgr||r.cptIng||'—'}</td><td>${r.detalle||r.hue||''}</td>
+      <td class="num" style="color:var(--green)">${r.ing!==0?liqN(liqIng(r)):''}</td>
+      <td class="num" style="color:var(--neg)">${r.egrOrig!==0?liqN(liqEgr(r)):''}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">TOTAL (${rows.length})</td>
+      <td class="num">${liqN(R.ingR)}</td><td class="num">${liqN(R.egrR)}</td></tr></tfoot>
+  </table>` : `<div class="liqVacio">Sin movimientos de Reclamos en el período elegido.</div>`;
 }
 
 /* ---------- INGRESOS ---------- */
@@ -1599,8 +1719,11 @@ function renderEgr(){
 let LIQ_CUR = 'USD';
 function liqCur(c){
   LIQ_CUR = c;
-  document.getElementById('liqU').classList.toggle('on', c==='USD');
-  document.getElementById('liqA').classList.toggle('on', c==='ARS');
+  ['liq','res'].forEach(p=>{
+    const u=document.getElementById(p+'U'), a=document.getElementById(p+'A');
+    if(u) u.classList.toggle('on', c==='USD');
+    if(a) a.classList.toggle('on', c==='ARS');
+  });
   render();
 }
 const liqSig = () => LIQ_CUR==='USD' ? 'u$s ' : '$ ';
@@ -1915,9 +2038,12 @@ function expCSV(view){
   } else if(view==='ab'){
     head = ['Cuando se libera','Huesped','Departamento','Ingreso u$s','Donde $'];
     lines = (lastFiltered.ab||[]).map(r=>[r.lib,r.hue,r.dep,R(r.ing),r.donde]);
+  } else if(view==='res'){
+    head = ['Mes','Comisión 20%','Sobrante edificios','Ingresos Reclamos','Gastos Reclamos','Resultado'];
+    lines = (lastFiltered.res||[]).map(r=>[r.mes,R(r.com),R(r.sobra),R(r.ingR),R(r.egrR),R(r.total)]);
   } else if(view==='rec'){
-    head = ['Fecha','Concepto','Detalle','Importe','Moneda'];
-    lines = (lastFiltered.rec||[]).map(r=>[r.fecha,r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
+    head = ['Fecha','Concepto','Detalle','Entra','Sale','Moneda'];
+    lines = (lastFiltered.rec||[]).map(r=>[r.fecha,r.cptEgr||r.cptIng,r.detalle||r.hue,R(r.ing),R(r.egrOrig),r.moneda]);
   } else if(view==='egr'){
     head = ['Fecha','Depto','Edificio origen','Concepto','Detalle','Importe','Moneda'];
     lines = lastFiltered.egr.map(r=>[r.fecha,r.dep||r.edificio,r.esParte?`${r.edificio} /${r.divisor}`:'',r.cptEgr,r.detalle,R(r.egrOrig),r.moneda]);
