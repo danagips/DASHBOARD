@@ -181,6 +181,26 @@ th.num{text-align:right}
 #upd{font-size:11px;color:var(--muted);white-space:nowrap}
 .perSel{background:var(--panel);border:1px solid var(--border);color:var(--txt);border-radius:9px;padding:9px 12px;font-family:inherit;font-size:13px;min-width:190px;cursor:pointer}
 .perSel:focus{outline:none;border-color:var(--red)}
+/* ---------- LIQUIDACIÓN AL PROPIETARIO (solapa Por Depto) ---------- */
+.liqBan{background:linear-gradient(135deg,#171b24,#101319);border:1px solid var(--border);
+  border-radius:14px 14px 0 0;padding:20px 24px;display:flex;justify-content:space-between;
+  align-items:center;gap:18px;flex-wrap:wrap}
+.liqBan .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.liqBan .marca{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.liqBan .marca span{color:var(--red)}
+.liqBan .tot{text-align:right}
+.liqBan .totV{font-size:34px;font-weight:800;color:var(--green);line-height:1.1;margin-top:2px}
+.liqBan .totV.neg{color:var(--neg)}
+.liqCard{background:var(--panel);border:1px solid var(--border);border-top:0;
+  border-radius:0 0 14px 14px;padding:20px 24px;margin-bottom:18px}
+.liqName{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.liqSub{font-size:13px;color:var(--muted);margin-top:5px}
+.liqVacio{color:var(--muted);font-size:13px;padding:30px 0;text-align:center}
+/* fila que abre cada departamento dentro del detalle de estadías */
+tr.grp td{background:var(--panel2);font-weight:800;border-top:2px solid var(--border)}
+tr.grp td .gd{display:inline-block;background:rgba(204,20,20,.15);color:var(--red);
+  padding:2px 9px;border-radius:6px;font-size:11.5px;font-weight:800;margin-right:9px}
+tr.grp td .gn{color:var(--muted);font-weight:600;font-size:12px}
 ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 </style>
 </head>
@@ -264,19 +284,28 @@ th.num{text-align:right}
 
   <div class="view" id="v-dep">
     <div class="filters">
-      <div class="f"><label>Departamento</label><div class="ms" id="ms-dep-dep"></div></div>
-      <div class="f"><label>Año</label><div class="ms" id="ms-dep-ano"></div></div>
-      <div class="f"><label>Mes</label><div class="ms" id="ms-dep-mes"></div></div>
+      <div class="f"><label>Moneda</label>
+        <div class="segs">
+          <button id="liqU" class="on" onclick="liqCur('USD')">u$s</button>
+          <button id="liqA" onclick="liqCur('ARS')">$</button>
+        </div>
+      </div>
+      <div class="f"><label>Propietario</label><select class="perSel" id="sel-dep-prop" onchange="render()"></select></div>
+      <div class="f"><label>Período</label><div class="ms per" id="ms-dep-per"></div></div>
     </div>
+    <div id="liq-aviso"></div>
+    <div class="liqBan" id="liq-ban"></div>
+    <div class="liqCard" id="liq-card"></div>
     <div class="kpis" id="k-dep"></div>
-    <div class="grid2">
-      <div class="card"><h3>Resultado por departamento</h3><div class="ch"><canvas id="ch-dep-res"></canvas></div></div>
-      <div class="card"><h3>Evolución mensual de la selección</h3><div class="ch"><canvas id="ch-dep-evo"></canvas></div></div>
-    </div>
-    <div class="tblCard">
-      <div class="tblHead"><h3 id="t-dep-n">Resumen por departamento</h3><button class="hbtn" onclick="expCSV('dep')">⬇ CSV</button></div>
+    <div class="tblCard" style="margin-bottom:18px">
+      <div class="tblHead"><h3 id="t-dep-n">Estadías del mes</h3><button class="hbtn" onclick="expCSV('dep')">⬇ CSV</button></div>
       <div class="tblWrap" id="t-dep"></div>
     </div>
+    <div class="tblCard" style="margin-bottom:18px">
+      <div class="tblHead"><h3 id="t-dep-e-n">Egresos del mes</h3></div>
+      <div class="tblWrap" id="t-dep-egr"></div>
+    </div>
+    <div class="card"><h3>Lo que cobró el propietario mes a mes</h3><div class="ch"><canvas id="ch-dep-mes"></canvas></div></div>
   </div>
 
   <div class="view" id="v-bk">
@@ -469,7 +498,27 @@ let EDIF_COUNT = {};     // edificio (min.) -> cantidad de deptos (cols AE/AF de
 let EDIF_COUNT_MES = {}; // 'edificio|mes/ano' -> cantidad (si varía mes a mes)
 let MIEMBROS = {};       // edificio (min.) -> [deptos activos que lo integran]
 let FDEP = {};           // depto normalizado -> 'dana' | 'brico' | 'rent' (Excel de asignación)
+let DEP2PROP = {};       // departamento -> propietario (col AR de $$$)
+let PROP2DEPS = {};      // propietario -> [departamentos]
+let PROPS = [];          // lista ordenada de propietarios
 const FID = '1etJJH1-4TswjWOADca6DngsRIhbWqfmdtcPUhgFP2VM';
+
+/* ---- LIQUIDACIÓN AL PROPIETARIO (solapa Por Depto) ----
+   Sólo MONTA e ITALIANO reparten sus gastos entre los departamentos. El Excel ya trae en
+   la columna AB la porción de cada gasto, y esa porción se le suma tal cual a cada uno de
+   los deptos de la lista (el Excel divide por menos deptos de los que después cobra: la
+   diferencia queda como margen de la empresa, es a propósito).
+   Los deptos que un mes están trabados no reciben gastos: se marcan en el aviso de arriba
+   y la decisión queda guardada por mes. */
+const LIQ_EDIF = {
+  monta:    ['0PB','1A','1C','2A','2D','4B','5D','6A','6B','8B','9A','A5D1','A5D2'],
+  italiano: ['IT1022','IT1121','IT326','IT335','IT336','IT624'],
+};
+const LIQ_COM = 0.20;    // comisión de Rent2888: 20% de los ingresos del propietario
+let LIQ_TRABA = {};      // 'mes/ano' -> [deptos que ese mes no reciben gastos de edificio]
+try{ LIQ_TRABA = JSON.parse(localStorage.getItem('r28_traba')||'null') || {'8/2026':['9A']}; }
+catch(e){ LIQ_TRABA = {'8/2026':['9A']}; }
+const liqGuardaTraba = () => { try{ localStorage.setItem('r28_traba', JSON.stringify(LIQ_TRABA)); }catch(e){} };
 const normDep = s => String(s).replace(/^[-\s]+/,'').replace(/\(.*?\)/g,'').trim().toUpperCase();
 
 /* ================= CALENDARIO (Excel aparte, una pestaña por mes) =================
@@ -688,6 +737,14 @@ async function loadData(){
       const egrU = Math.abs(egrUx || (isUSD ? egrRaw : (rate ? egrRaw/rate : 0))) * sgnE;
       const egrA = Math.abs(egrAx || (!isUSD ? egrRaw : (rate ? egrRaw*rate : 0))) * sgnE;
 
+      // "$ por Depto" (col AB): para los gastos cargados a MONTA o ITALIANO, el Excel
+      // ya trae acá la porción que le toca a cada departamento. Para un depto normal
+      // es igual a la col X. Se usa en la solapa Por Depto (liquidación al propietario).
+      const abRaw = pn(g(r,'$ por Depto'));
+      const sgnAB = abRaw < 0 ? -1 : 1;
+      const abU = abRaw===0 ? 0 : Math.abs(isUSD ? abRaw : (rate ? abRaw/rate : 0)) * sgnAB;
+      const abA = abRaw===0 ? 0 : Math.abs(!isUSD ? abRaw : (rate ? abRaw*rate : 0)) * sgnAB;
+
       // COMISIÓN BK: col K, moneda col L, a pesos/dólares vía MEP
       const com  = pn(g(r,'Comision BK'));
       const comU = isUSD ? com : (rate ? com/rate : 0);
@@ -720,6 +777,7 @@ async function loadData(){
         cptEgr: g(r,'Concepto Egresos') || (egrRaw!==0 ? (g(r,'Concepto Ingresos')||'(sin concepto)') : ''),
         detalle: g(r,'Detalle') || (egrRaw!==0 ? g(r,'Huésped') : ''),
         ing, ingU, ingA, egrU, egrA, egrOrig: egrRaw, com, comU, comA,
+        abOrig: abRaw, abU, abA,
         // crudos, para el control de carga de Egresos (col L y col V sin reemplazos)
         monedaRaw, cptEgrRaw: g(r,'Concepto Egresos'), fechaA: g(r,'Fecha'), fechaF: g(r,'Fecha de ingreso'),
         // fila en pesos que NO trae la conversión del Excel (col AG): se dolarizó con el
@@ -727,6 +785,40 @@ async function loadData(){
         sinAG: (!isUSD && ing!==0 && !agU), tcUsado: (!isUSD && ing!==0 && !agU) ? rate : 0,
         tc: (!isUSD && ing!==0) ? (agU ? Math.abs(ing/agU) : rate) : 0,
       });
+    }
+
+    // ---- mapa DEPARTAMENTO -> PROPIETARIO (col AR del Excel) ----
+    // Se arma contando: a cada depto le queda el propietario que más veces aparece en sus
+    // filas. Se ignoran los EDIFICIOS (Monta, Italiano, etc), porque ahí la col AR trae el
+    // dueño del edificio y no sirve para liquidar. Se normalizan mayúsculas y espacios de
+    // más para que "Paola González " y "Paola González" no queden separados.
+    {
+      const cuenta = {};   // dep -> { claveProp -> {n, nombre} }
+      for(const r of ROWS){
+        const d = String(r.dep||'').trim();
+        const p = String(r.propietario||'').trim();
+        if(!d || !p || p==='#N/A') continue;
+        if(EDIF.has(d.toLowerCase()) || /reclamo/i.test(d)) continue;
+        const k = p.toLowerCase().replace(/\s+/g,' ');
+        (cuenta[d] = cuenta[d] || {});
+        (cuenta[d][k] = cuenta[d][k] || {n:0, nombre:p});
+        cuenta[d][k].n++;
+      }
+      DEP2PROP = {}; PROPS = [];
+      const vistos = {};
+      for(const d in cuenta){
+        let mejor = null;
+        for(const k in cuenta[d]) if(!mejor || cuenta[d][k].n > cuenta[d][mejor].n) mejor = k;
+        if(!mejor) continue;
+        const nombre = cuenta[d][mejor].nombre;
+        DEP2PROP[d] = nombre;
+        if(!vistos[mejor]){ vistos[mejor] = nombre; PROPS.push(nombre); }
+        else DEP2PROP[d] = vistos[mejor];
+      }
+      PROPS.sort((a,b)=>a.localeCompare(b,'es'));
+      PROP2DEPS = {};
+      for(const d in DEP2PROP){ (PROP2DEPS[DEP2PROP[d]] = PROP2DEPS[DEP2PROP[d]] || []).push(d); }
+      for(const p in PROP2DEPS) PROP2DEPS[p].sort((a,b)=>a.localeCompare(b,'es'));
     }
 
     // Reclamos SÍ suma en Ingresos (igual que el Power BI); sus egresos van a la solapa Resultado
@@ -972,9 +1064,14 @@ function buildFilters(){
   const arbolEgr = {};
   EGR_CRUDO.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
   makePer('ms-egr-per', arbolEgr, perState['ms-egr-per'] ? [...perState['ms-egr-per'].sel] : null);
-  makeMS('ms-dep-dep', depsAll, 'dep', true, prevAll('ms-dep-dep'));
-  makeMS('ms-dep-ano', anosAll, 'ano', false, prevY('ms-dep-ano')||[curY]);
-  makeMS('ms-dep-mes', M12, 'mes', true, prevAll('ms-dep-mes'));
+  // ---- Por Depto = liquidación al propietario ----
+  const selP = document.getElementById('sel-dep-prop');
+  const prevP = selP.value;
+  selP.innerHTML = PROPS.map(p=>`<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('');
+  selP.value = (prevP && PROPS.includes(prevP)) ? prevP : (PROPS[0]||'');
+  const arbolDep = {};
+  ROWS.forEach(r=>{ if(r.ano&&r.mes&&(r.ing!==0||r.egrOrig!==0)){ (arbolDep[r.ano] = arbolDep[r.ano] || new Set()).add(r.mes); } });
+  makePer('ms-dep-per', arbolDep, perState['ms-dep-per'] ? [...perState['ms-dep-per'].sel] : null);
   makeMS('ms-bk-pro', BK.map(r=>r.propBK||'(sin propiedad)'), 'pro', true, prevAll('ms-bk-pro'));
   makeMS('ms-bk-ano', anosAll, 'ano', false, prevY('ms-bk-ano')||[curY]);
   makeMS('ms-bk-mes', M12, 'mes', true, prevAll('ms-bk-mes'));
@@ -1497,61 +1594,196 @@ function renderEgr(){
   </table>`;
 }
 
-/* ---------- POR DEPTO ---------- */
+/* ---------- POR DEPTO = LIQUIDACIÓN AL PROPIETARIO ----------
+   Ingresos de todos sus deptos − egresos (los propios + la parte de Monta/Italiano que
+   trae la col AB) − 20% de comisión = lo que se le transfiere.
+   La moneda la elige el botón de arriba; el resto del tablero sigue en u$s. */
+let LIQ_CUR = 'USD';
+function liqCur(c){
+  LIQ_CUR = c;
+  document.getElementById('liqU').classList.toggle('on', c==='USD');
+  document.getElementById('liqA').classList.toggle('on', c==='ARS');
+  render();
+}
+const liqSig = () => LIQ_CUR==='USD' ? 'u$s ' : '$ ';
+const liqN   = n => liqSig() + fmt(n);
+const liqIng = r => r.debe ? 0 : (LIQ_CUR==='USD' ? r.ingU : r.ingA);
+const liqEgr = r => LIQ_CUR==='USD' ? r.egrU : r.egrA;
+const liqAb  = r => LIQ_CUR==='USD' ? r.abU  : r.abA;
+// deptos que ese mes NO reciben gastos de edificio (estaban trabados)
+const liqTrabaDe = k => new Set(LIQ_TRABA[k] || []);
+
+/* Núcleo del cálculo: para un propietario y un conjunto de meses devuelve todo lo que
+   necesita la pantalla. Se usa igual para el mes elegido y para cada barra del gráfico. */
+// Recorrer las 76.000 filas una vez por mes hacía que el gráfico tardara. Se separan
+// primero las filas que le importan al propietario y después se filtra sólo por período.
+function liqPool(deps){
+  const depSet = new Set(deps);
+  const edifs = [];
+  for(const edi in LIQ_EDIF){
+    const mios = LIQ_EDIF[edi].filter(d=>depSet.has(d));
+    if(mios.length) edifs.push({edi, mios, nombre: edi.charAt(0).toUpperCase()+edi.slice(1),
+      gastos: ROWS.filter(r => String(r.dep||'').toLowerCase()===edi && r.abOrig!==0)});
+  }
+  return {
+    est: ROWS.filter(r => depSet.has(r.dep) && r.ing!==0),
+    egr: ROWS.filter(r => depSet.has(r.dep) && r.egrOrig!==0),
+    edifs
+  };
+}
+function liqCalc(deps, periodos, pool){
+  const P = pool || liqPool(deps);
+  const dentro = r => periodos.has(r.mes+'/'+r.ano);
+  const estadias = P.est.filter(dentro);
+  const ing = estadias.reduce((a,r)=>a+liqIng(r),0);
+  const noches = estadias.reduce((a,r)=>a+r.noches,0);
+
+  // egresos propios del departamento (cargados directo a él)
+  const detalle = P.egr.filter(dentro).map(r=>({cpt:r.cptEgr||'(sin concepto)', org:r.dep, monto:liqEgr(r)}));
+
+  // parte de los gastos de edificio: MONTA e ITALIANO son los únicos que reparten.
+  // El Excel ya trae la porción en la col AB y esa porción se le suma a cada uno de los
+  // deptos del propietario que estén en ese edificio (y que ese mes no estén trabados).
+  for(const E of P.edifs){
+    for(const g of E.gastos){
+      if(!dentro(g)) continue;
+      const traba = liqTrabaDe(g.mes+'/'+g.ano);
+      const cuentan = E.mios.filter(d=>!traba.has(d)).length;
+      if(!cuentan) continue;
+      detalle.push({cpt:g.cptEgr||'(sin concepto)', org:E.nombre, monto:liqAb(g)*cuentan});
+    }
+  }
+  const egr = detalle.reduce((a,d)=>a+d.monto,0);
+  const com = -ing*LIQ_COM;
+  return {estadias, noches, ing, egr, com, detalle, total: ing+egr+com};
+}
+
 function renderDep(){
-  const dep=msGet('ms-dep-dep'), ano=msGet('ms-dep-ano'), mes=msGet('ms-dep-mes');
-  const iRows = ING.filter(r=>dep.has(r.dep)&&ano.has(r.ano)&&mes.has(r.mes));
-  const eRows = EGR.filter(r=>dep.has(r.dep||r.edificio)&&ano.has(r.ano)&&mes.has(r.mes));
-  const totI = iRows.reduce((a,r)=>a+effIng(r),0);
-  const totE = eRows.reduce((a,r)=>a+vEgr(r),0);
-  const totR = totI+totE;   // los egresos ya vienen con signo negativo
-  const noches = iRows.reduce((a,r)=>a+r.noches,0);
+  const prop = document.getElementById('sel-dep-prop').value;
+  const per = perState['ms-dep-per'] ? perState['ms-dep-per'].sel : new Set();
+  const deps = PROP2DEPS[prop] || [];
+  const lbl = document.getElementById('ms-dep-per-lbl');
+  const perTxt = lbl ? lbl.textContent : '';
+
+  const pool = liqPool(deps);
+  const R = liqCalc(deps, per, pool);
+  liqAvisoTrabados(deps, per);
+
+  // ---- banda de arriba con el total a transferir ----
+  document.getElementById('liq-ban').innerHTML = `
+    <div><div class="marca">Rent<span>2888</span></div>
+      <div class="lbl" style="margin-top:5px">Liquidación mensual · ${LIQ_CUR==='USD'?'dólares':'pesos'}</div></div>
+    <div class="tot"><div class="lbl">Total a transferir</div>
+      <div class="totV ${R.total<0?'neg':''}">${liqN(R.total)}</div></div>`;
+
+  document.getElementById('liq-card').innerHTML = deps.length ? `
+    <div class="liqName">${prop}</div>
+    <div class="liqSub">${deps.join(', ')} · ${deps.length} depto${deps.length>1?'s':''} · ${fmt(R.noches)} noches · ${perTxt}</div>`
+    : `<div class="liqVacio">Este propietario no tiene departamentos asignados en el Excel.</div>`;
+
+  // ---- los cuatro rectángulos ----
   document.getElementById('k-dep').innerHTML = `
-    <div class="kpi"><div class="t">Ingresos (${CUR==='USD'?'u$s':'AR$'})</div><div class="v pos">${fmtM(totI)}</div></div>
-    <div class="kpi"><div class="t">Egresos</div><div class="v red">${fmtM(totE)}</div></div>
-    <div class="kpi"><div class="t">Resultado</div><div class="v ${totR>=0?'pos':'negv'}">${fmtM(totR)}</div></div>
-    <div class="kpi"><div class="t">Margen</div><div class="v gold">${totI?((totR/totI)*100).toFixed(0):'0'}%</div></div>
-    <div class="kpi"><div class="t">Reservas</div><div class="v">${iRows.length}</div><div class="s">${fmt(noches)} noches</div></div>`;
-  // agrupado por depto
-  const agg = {};
-  iRows.forEach(r=>{ const a=agg[r.dep]=agg[r.dep]||{dep:r.dep,ing:0,egr:0,n:0,noches:0}; a.ing+=effIng(r); a.n++; a.noches+=r.noches; });
-  eRows.forEach(r=>{ const k=r.dep||r.edificio; const a=agg[k]=agg[k]||{dep:k,ing:0,egr:0,n:0,noches:0}; a.egr+=vEgr(r); });
-  let list = Object.values(agg).map(a=>({...a, res:a.ing+a.egr, margen:a.ing?((a.ing+a.egr)/a.ing*100):0}));
-  const s=sortState.dep; list.sort((a,b)=>cmp(a,b,s.key,s.asc));
-  lastFiltered.dep = list;
-  // chart resultado por depto
-  const top = [...list].sort((a,b)=>b.res-a.res);
-  mkChart('ch-dep-res','bar',top.map(e=>e.dep),[{label:'Resultado',data:top.map(e=>e.res),backgroundColor:top.map(e=>e.res>=0?'#2ecc71':'#ff5c5c'),borderRadius:5}]);
-  // evolución mensual de la selección
-  const byM={};
-  iRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.i+=effIng(r); });
-  eRows.forEach(r=>{ const b=byM[r.mesano]=byM[r.mesano]||{i:0,e:0}; b.e+=vEgr(r); });
-  const keys = Object.keys(byM).sort(spMesAno);
-  const labels = keys.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)});
-  mkChart('ch-dep-evo','line',labels,[
-    {label:'Ingresos',data:keys.map(k=>byM[k].i),borderColor:'#2ecc71',backgroundColor:'rgba(46,204,113,.12)',fill:true,tension:.3,pointRadius:2},
-    {label:'Egresos',data:keys.map(k=>byM[k].e),borderColor:'#CC1414',backgroundColor:'rgba(204,20,20,.12)',fill:true,tension:.3,pointRadius:2}]);
-  document.getElementById('t-dep-n').textContent = `Resumen por departamento (${list.length})`;
-  document.getElementById('t-dep').innerHTML = `<table>
-    <thead><tr>
-      <th onclick="sortTable('dep','dep')">Depto / Edificio</th>
-      <th class="num" onclick="sortTable('dep','n')">Reservas</th>
-      <th class="num" onclick="sortTable('dep','noches')">Noches</th>
-      <th class="num" onclick="sortTable('dep','ing')">Ingresos</th>
-      <th class="num" onclick="sortTable('dep','egr')">Egresos</th>
-      <th class="num" onclick="sortTable('dep','res')">Resultado</th>
-      <th class="num" onclick="sortTable('dep','margen')">Margen</th>
-    </tr></thead>
-    <tbody>${list.map(a=>`<tr>
-      <td><b>${a.dep}</b></td><td class="num">${a.n}</td><td class="num">${fmt(a.noches)}</td>
-      <td class="num" style="color:var(--green)">${fmt(a.ing)}</td>
-      <td class="num" style="color:var(--neg)">${fmt(a.egr)}</td>
-      <td class="num"><b style="color:${a.res>=0?'var(--green)':'var(--neg)'}">${fmt(a.res)}</b></td>
-      <td class="num">${a.ing?a.margen.toFixed(0)+'%':'—'}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>TOTAL</td><td class="num">${iRows.length}</td><td class="num">${fmt(noches)}</td>
-      <td class="num">${fmt(totI)}</td><td class="num">${fmt(totE)}</td><td class="num">${fmt(totR)}</td>
-      <td class="num">${totI?((totR/totI)*100).toFixed(0)+'%':'—'}</td></tr></tfoot>
-  </table>`;
+    <div class="kpi"><div class="t">Ingresos</div><div class="v pos">${liqN(R.ing)}</div></div>
+    <div class="kpi"><div class="t">Egresos</div><div class="v red">${liqN(R.egr)}</div></div>
+    <div class="kpi"><div class="t">Comisión 20%</div><div class="v red">${liqN(R.com)}</div></div>
+    <div class="kpi"><div class="t">Noches</div><div class="v">${fmt(R.noches)}</div></div>`;
+
+  // ---- estadías del mes, agrupadas por departamento ----
+  const porDep = {};
+  R.estadias.forEach(r=>{
+    const a = porDep[r.dep] = porDep[r.dep] || {dep:r.dep, noches:0, monto:0, filas:[]};
+    a.noches += r.noches; a.monto += liqIng(r); a.filas.push(r);
+  });
+  const grupos = Object.values(porDep).sort((a,b)=>b.monto-a.monto);
+  grupos.forEach(g=>g.filas.sort((a,b)=>cmp(a,b,'fIn',true)));
+  lastFiltered.dep = R.estadias.map(r=>({dep:r.dep, hue:r.hue, fIn:r.fIn, fOut:r.fOut, noches:r.noches, monto:liqIng(r)}));
+
+  document.getElementById('t-dep-n').textContent = `Estadías del mes (${R.estadias.length})`;
+  document.getElementById('t-dep').innerHTML = grupos.length ? `<table>
+    <thead><tr><th>Depto</th><th>Huésped</th><th>Check-in</th><th>Check-out</th>
+      <th class="num">Noches</th><th class="num">Monto</th></tr></thead>
+    <tbody>${grupos.map(g=>`
+      <tr class="grp"><td colspan="4"><span class="gd">${g.dep}</span><span class="gn">${fmt(g.noches)} noches</span></td>
+        <td class="num">${fmt(g.noches)}</td><td class="num" style="color:var(--green)">${liqN(g.monto)}</td></tr>
+      ${g.filas.map(r=>`<tr>
+        <td></td><td>${r.hue||'—'}</td><td>${r.fIn||'—'}</td><td>${r.fOut||'—'}</td>
+        <td class="num">${fmt(r.noches)}</td>
+        <td class="num" style="color:var(--green)">${liqN(liqIng(r))}</td></tr>`).join('')}`).join('')}</tbody>
+    <tfoot><tr><td colspan="4">TOTAL</td><td class="num">${fmt(R.noches)}</td>
+      <td class="num">${liqN(R.ing)}</td></tr></tfoot>
+  </table>` : `<div class="liqVacio">Sin estadías en el período elegido.</div>`;
+
+  // ---- egresos del mes, agrupados por concepto y origen ----
+  const porCpt = {};
+  R.detalle.forEach(d=>{
+    const k = d.cpt+'|'+d.org;
+    (porCpt[k] = porCpt[k] || {cpt:d.cpt, org:d.org, monto:0}).monto += d.monto;
+  });
+  const egrList = Object.values(porCpt).sort((a,b)=>a.monto-b.monto);
+  document.getElementById('t-dep-e-n').textContent = `Egresos del mes (${egrList.length})`;
+  document.getElementById('t-dep-egr').innerHTML = egrList.length ? `<table>
+    <thead><tr><th>Concepto</th><th>Origen</th><th class="num">Monto</th></tr></thead>
+    <tbody>${egrList.map(d=>`<tr>
+      <td>${d.cpt}</td><td style="color:var(--muted)">${d.org}</td>
+      <td class="num" style="color:var(--neg)"><b>${liqN(d.monto)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2">TOTAL</td><td class="num">${liqN(R.egr)}</td></tr></tfoot>
+  </table>` : `<div class="liqVacio">Sin egresos en el período elegido.</div>`;
+
+  // ---- gráfico: lo que cobró mes a mes en todo el historial ----
+  const meses = [...new Set([...pool.est, ...pool.egr].filter(r=>r.mes&&r.ano).map(r=>r.mes+'/'+r.ano))].sort(spMesAno);
+  const serie = meses.map(k=>liqCalc(deps, new Set([k]), pool).total);
+  const etiq = meses.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)});
+  const elegido = new Set([...per]);
+  mkChart('ch-dep-mes','bar',etiq,[{
+    label:'Total a transferir', data:serie,
+    backgroundColor: meses.map(k=>elegido.has(k) ? '#CC1414' : 'rgba(255,255,255,.22)'),
+    borderRadius:5
+  }],{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+liqN(c.parsed.y)}}}});
+}
+
+/* Aviso mes a mes: qué deptos de Monta / Italiano estuvieron trabados y por lo tanto no
+   tienen que recibir gastos del edificio. La respuesta queda guardada por mes. */
+function liqAvisoTrabados(deps, per){
+  const cont = document.getElementById('liq-aviso');
+  const meses = [...per].sort(spMesAno);
+  const depSet = new Set(deps);
+  const bloques = [];
+  for(const k of meses){
+    const traba = liqTrabaDe(k);
+    const [m,a] = k.split('/');
+    for(const edi in LIQ_EDIF){
+      const mios = LIQ_EDIF[edi].filter(d=>depSet.has(d));
+      if(!mios.length) continue;
+      const nombre = edi.charAt(0).toUpperCase()+edi.slice(1);
+      bloques.push(`<div class="aviTit">${nombre} · ${MESES[+m]} ${a}</div>` +
+        mios.map(d=>{
+          const off = traba.has(d);
+          return `<div class="aviLin"><label style="cursor:pointer">
+            <input type="checkbox" ${off?'':'checked'} onchange="liqTraba('${k}','${d}',this.checked)">
+            <b>${d}</b> <span>${off?'— trabado, no recibe gastos' : '— recibe su parte de gastos'}</span>
+          </label></div>`;
+        }).join(''));
+    }
+  }
+  if(!bloques.length){ cont.innerHTML=''; return; }
+  const nTraba = meses.reduce((a,k)=>a+[...liqTrabaDe(k)].filter(d=>depSet.has(d)).length,0);
+  const abierto = cont.querySelector('.avi.on') ? ' on' : '';
+  cont.innerHTML = `<div class="avi${abierto}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <div><div class="debTit">Deptos trabados</div>
+        <div class="debVal">${nTraba} sin gastos de edificio<small>revisalo cada mes</small></div></div>
+      <button class="debVer" onclick="this.closest('.avi').classList.toggle('on')">Ver / cambiar</button>
+    </div>
+    <div class="debDet">${bloques.join('')}
+      <div class="debNota">Destildá el depto que ese mes estuvo trabado: no va a recibir la parte de los gastos del edificio. Queda guardado.</div>
+    </div></div>`;
+}
+function liqTraba(k, dep, recibe){
+  const set = new Set(LIQ_TRABA[k] || []);
+  if(recibe) set.delete(dep); else set.add(dep);
+  if(set.size) LIQ_TRABA[k] = [...set]; else delete LIQ_TRABA[k];
+  liqGuardaTraba();
+  render();
 }
 
 /* ---------- BOOKING (todo en PESOS · col K · fecha = checkout col H) ---------- */
@@ -1642,8 +1874,8 @@ function expCSV(view){
     head = ['Mes','Reservas','Ingresos','Egresos','Comision BK','Resultado','Margen'];
     lines = lastFiltered.con.map(r=>[r.mes,r.reservas,R(r.ing),R(r.egr),R(r.com),R(r.res),r.margen]);
   } else if(view==='dep'){
-    head = ['Depto','Reservas','Noches','Ingresos','Egresos','Resultado','Margen %'];
-    lines = lastFiltered.dep.map(r=>[r.dep,r.n,r.noches,R(r.ing),R(r.egr),R(r.res),R(r.margen)]);
+    head = ['Depto','Huésped','Check-in','Check-out','Noches','Monto'];
+    lines = (lastFiltered.dep||[]).map(r=>[r.dep,r.hue,r.fIn,r.fOut,r.noches,R(r.monto)]);
   } else if(view==='cf'){
     head = ['Depto','Asignado a','Ingresos u$s','F'];
     lines = (lastFiltered.cf||[]).map(x=>[x.dep,x.per,R(x.ing),R(x.f)]);
