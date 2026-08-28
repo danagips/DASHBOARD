@@ -290,7 +290,7 @@ tr.grp td .gn{color:var(--muted);font-weight:600;font-size:12px}
           <button id="liqA" onclick="liqCur('ARS')">$</button>
         </div>
       </div>
-      <div class="f"><label>Propietario</label><select class="perSel" id="sel-dep-prop" onchange="render()"></select></div>
+      <div class="f"><label>Propietario</label><select class="perSel" id="sel-dep-prop" onchange="liqSetProp(this.value)"></select></div>
       <div class="f"><label>Período</label><div class="ms per" id="ms-dep-per"></div></div>
     </div>
     <div id="liq-aviso"></div>
@@ -1065,10 +1065,8 @@ function buildFilters(){
   EGR_CRUDO.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
   makePer('ms-egr-per', arbolEgr, perState['ms-egr-per'] ? [...perState['ms-egr-per'].sel] : null);
   // ---- Por Depto = liquidación al propietario ----
-  const selP = document.getElementById('sel-dep-prop');
-  const prevP = selP.value;
-  selP.innerHTML = PROPS.map(p=>`<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('');
-  selP.value = (prevP && PROPS.includes(prevP)) ? prevP : (PROPS[0]||'');
+  // La lista de propietarios se arma en renderDep, porque depende del mes elegido:
+  // sólo aparecen los que ese mes tuvieron ingresos o egresos.
   const arbolDep = {};
   ROWS.forEach(r=>{ if(r.ano&&r.mes&&(r.ing!==0||r.egrOrig!==0)){ (arbolDep[r.ano] = arbolDep[r.ano] || new Set()).add(r.mes); } });
   makePer('ms-dep-per', arbolDep, perState['ms-dep-per'] ? [...perState['ms-dep-per'].sel] : null);
@@ -1658,9 +1656,43 @@ function liqCalc(deps, periodos, pool){
   return {estadias, noches, ing, egr, com, detalle, total: ing+egr+com};
 }
 
+/* Propietarios que tuvieron movimiento en el período elegido. Se cuentan los ingresos y
+   los egresos propios de sus deptos, y también la parte que les toca de los gastos de
+   Monta / Italiano (un dueño puede no haber alquilado y aun así tener gastos del edificio). */
+function liqConMovimiento(per){
+  const con = new Set();
+  const dueñosDe = {};   // edificio -> [propietarios de sus deptos]
+  for(const edi in LIQ_EDIF){
+    dueñosDe[edi] = [...new Set(LIQ_EDIF[edi].map(d=>DEP2PROP[d]).filter(Boolean))];
+  }
+  for(const r of ROWS){
+    if(!per.has(r.mes+'/'+r.ano)) continue;
+    const edi = String(r.dep||'').toLowerCase();
+    if(dueñosDe[edi] && r.abOrig!==0){ dueñosDe[edi].forEach(p=>con.add(p)); continue; }
+    if(r.ing===0 && r.egrOrig===0) continue;
+    const p = DEP2PROP[r.dep];
+    if(p) con.add(p);
+  }
+  return con;
+}
+let liqProp = '';
+function liqSetProp(v){ liqProp = v; render(); }
+
 function renderDep(){
-  const prop = document.getElementById('sel-dep-prop').value;
   const per = perState['ms-dep-per'] ? perState['ms-dep-per'].sel : new Set();
+  // el desplegable se rearma con cada cambio de mes: sólo los que tuvieron movimiento
+  const con = liqConMovimiento(per);
+  let lista = PROPS.filter(p=>con.has(p));
+  if(!lista.length) lista = PROPS;
+  const selEl = document.getElementById('sel-dep-prop');
+  const firma = lista.join('|');
+  if(selEl.dataset.firma !== firma){
+    selEl.innerHTML = lista.map(p=>`<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('');
+    selEl.dataset.firma = firma;
+  }
+  if(!lista.includes(liqProp)) liqProp = lista[0] || '';
+  selEl.value = liqProp;
+  const prop = liqProp;
   const deps = PROP2DEPS[prop] || [];
   const lbl = document.getElementById('ms-dep-per-lbl');
   const perTxt = lbl ? lbl.textContent : '';
@@ -1730,7 +1762,8 @@ function renderDep(){
   </table>` : `<div class="liqVacio">Sin egresos en el período elegido.</div>`;
 
   // ---- gráfico: lo que cobró mes a mes en todo el historial ----
-  const meses = [...new Set([...pool.est, ...pool.egr].filter(r=>r.mes&&r.ano).map(r=>r.mes+'/'+r.ano))].sort(spMesAno);
+  const conGastosEdi = pool.edifs.reduce((a,E)=>a.concat(E.gastos),[]);
+  const meses = [...new Set([...pool.est, ...pool.egr, ...conGastosEdi].filter(r=>r.mes&&r.ano).map(r=>r.mes+'/'+r.ano))].sort(spMesAno);
   const serie = meses.map(k=>liqCalc(deps, new Set([k]), pool).total);
   const etiq = meses.map(k=>{const [m,y]=k.split('/');return MESES[+m].slice(0,3)+" '"+String(y).slice(2)});
   const elegido = new Set([...per]);
