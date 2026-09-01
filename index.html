@@ -724,6 +724,13 @@ async function loadData(){
       const fRef = fIngreso || parseFecha(g(r,'Fecha'));
       const mesF = fRef ? fRef.m : mes, anoF = fRef ? fRef.y : ano;
       const mesanoF = (mesF&&anoF) ? mesF+'/'+anoF : mesano;
+      // referencia para los EGRESOS: la col F (fecha de ingreso) sólo vale si coincide con
+      // la col A. Un egreso no tiene "fecha de ingreso" —eso es de las reservas—: Mery la
+      // completa copiando la fecha, así que cuando las dos no coinciden es un tipeo y manda
+      // la col A, que es la que se ve en el Excel. Si coinciden, da exactamente lo mismo.
+      const fEgr = parseFecha(g(r,'Fecha')) || fIngreso;
+      const mesE = fEgr ? fEgr.m : mesF, anoE = fEgr ? fEgr.y : anoF;
+      const mesanoE = (mesE&&anoE) ? mesE+'/'+anoE : mesanoF;
       // referencia CHECKOUT (col H) para comisiones BK; fallback a la anterior
       const fCheckout = parseFecha(g(r,'Fecha de Egreso')) || fRef;
       const mesH = fCheckout ? fCheckout.m : mesF, anoH = fCheckout ? fCheckout.y : anoF;
@@ -775,7 +782,8 @@ async function loadData(){
         SIN_FECHA.push({fecha:g(r,'Fecha'), dep:depName, hue:g(r,'Huésped'), ing, moneda:isUSD?'u$s':'$'});
 
       ROWS.push({
-        fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF, mesH, anoH, mesanoH, sinF,
+        fecha: g(r,'Fecha'), mes:mesF, ano:anoF, mesano:mesanoF, mesF, anoF, mesanoF,
+        mesE, anoE, mesanoE, mesH, anoH, mesanoH, sinF,
         dep: g(r,'Departamento'), pla: g(r,'Plataforma'),
         cptIng: g(r,'Concepto Ingresos'),
         hue: g(r,'Huésped'), noches: pn(g(r,'Noches')),
@@ -1075,7 +1083,7 @@ function buildFilters(){
   makeMS('ms-egr-cpt', EGR_CRUDO.map(r=>r.cptEgr), 'cpt', true, prevAll('ms-egr-cpt'));
   // Período (año ▸ meses), igual que en Ingresos
   const arbolEgr = {};
-  EGR_CRUDO.forEach(r=>{ if(r.ano&&r.mes){ (arbolEgr[r.ano] = arbolEgr[r.ano] || new Set()).add(r.mes); } });
+  EGR_CRUDO.forEach(r=>{ if(r.anoE&&r.mesE){ (arbolEgr[r.anoE] = arbolEgr[r.anoE] || new Set()).add(r.mesE); } });
   makePer('ms-egr-per', arbolEgr, perState['ms-egr-per'] ? [...perState['ms-egr-per'].sel] : null);
   // ---- Por Depto = liquidación al propietario ----
   // La lista de propietarios se arma en renderDep, porque depende del mes elegido:
@@ -1592,7 +1600,7 @@ function renderIng(){
 function renderEgr(){
   const edi=msGet('ms-egr-edi'), cpt=msGet('ms-egr-cpt'), per=perGet('ms-egr-per');
   // el desplegable lista SOLO los deptos con egresos en el período elegido
-  const enPerE = r => per.has(r.mes+'/'+r.ano);
+  const enPerE = r => per.has(r.mesE+'/'+r.anoE);   // los egresos se fechan por la col A
   const depsMes = [...new Set(EGR_CRUDO.filter(enPerE).map(r=>r.dep))].filter(Boolean);
   const msE = msState['ms-egr-edi'];
   const distintoE = !msE || msE.vals.length!==depsMes.length || depsMes.some(d=>!msE.vals.includes(d));
@@ -1616,7 +1624,7 @@ function renderEgr(){
   /* ---- CONTROL DE CARGA: cuatro reglas que siempre se tienen que cumplir ----
      Se mira sobre las filas CRUDAS del Excel (no las ya repartidas por edificio),
      así también entran las que no tienen departamento y no llegan a la tabla. */
-  const crud = ROWS.filter(r => r.egrOrig!==0 && per.has(r.mes+'/'+r.ano));
+  const crud = ROWS.filter(r => r.egrOrig!==0 && per.has(r.mesE+'/'+r.anoE));
   const igual = (a,b) => String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase();
   const malFecha = crud.filter(r => !igual(r.fechaF, r.fechaA));
   const malEdif  = crud.filter(r => !igual(r.edificio, r.dep));
