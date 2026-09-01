@@ -833,8 +833,9 @@ async function loadData(){
       for(const p in PROP2DEPS) PROP2DEPS[p].sort((a,b)=>a.localeCompare(b,'es'));
     }
 
-    // Reclamos SÍ suma en Ingresos (igual que el Power BI); sus egresos van a la solapa Resultado
-    ING = ROWS.filter(r=>r.ing!==0 && r.dep && (!ACTIVOS.size || ACTIVOS.has(r.dep) || /reclamo/i.test(r.dep)));
+    // INGRESOS: entra toda fila que tenga un importe cargado y un departamento. Punto.
+    // No se mira si el depto está activo o inactivo: plata que entró es plata que entró.
+    ING = ROWS.filter(r=>r.ing!==0 && r.dep);
     const esReclamo = r => /reclamo/i.test((r.dep||r.edificio||''));
     // egresos reales (solo deptos activos + edificios, sin reclamos)
     const egrReales = ROWS.filter(r=>{
@@ -1403,24 +1404,21 @@ function renderIng(){
     calOk(ma) && !calTieneMes(d,ma[0],ma[1]));
   const enPer = r => per.has(r.mes+'/'+r.ano);
 
-  // ---- el desplegable de Departamento lista solo los que SE PODIAN ALQUILAR en el período ----
-  // (los mismos que muestra el gráfico). Se rearma cada vez que cambia el período.
-  // Salvaguarda: si un depto tuvo ingresos en el período, queda igual aunque el calendario
-  // diga lo contrario — no lo escondemos y así se puede revisar.
-  if(hayCal){
-    const conIngreso = new Set(ING.filter(enPer).map(r=>r.dep));
-    const alquilables = [...new Set(ING.map(r=>r.dep))]
-      .filter(d => conIngreso.has(d) || !fueraDeAlquiler(d));
+  // ---- el desplegable de Departamento lista SOLO los que facturaron en el período ----
+  // Si tuvo un ingreso cargado, está. Si no, no. No se mira el calendario ni el estado
+  // activo/inactivo: para saber quién facturó alcanza con el Excel de plata.
+  {
+    const conIngreso = [...new Set(ING.filter(enPer).map(r=>r.dep))].filter(Boolean);
     const ms = msState['ms-ing-dep'];
-    const distinto = !ms || ms.vals.length!==alquilables.length
-      || alquilables.some(d=>!ms.vals.includes(d));
+    const distinto = !ms || ms.vals.length!==conIngreso.length
+      || conIngreso.some(d=>!ms.vals.includes(d));
     if(distinto){
       // si el usuario tenía algunos elegidos, se respetan; si estaban todos, siguen todos.
-      // Y si los que tenía elegidos no existen en este período, vuelve a mostrarlos todos
+      // Y si los que tenía elegidos no facturaron en este mes, vuelve a mostrarlos todos
       // en vez de dejar la pantalla en blanco sin explicación.
       let prev = (ms && ms.sel.size!==ms.vals.length) ? [...ms.sel] : null;
-      if(prev && !prev.some(d=>alquilables.includes(d))) prev = null;
-      makeMS('ms-ing-dep', alquilables, 'dep', true, prev);
+      if(prev && !prev.some(d=>conIngreso.includes(d))) prev = null;
+      makeMS('ms-ing-dep', conIngreso, 'dep', true, prev);
     }
   }
   const dep2 = msGet('ms-ing-dep');
@@ -1466,8 +1464,6 @@ function renderIng(){
           <td class="num">${r.moneda==='USD'?'u$s':'$'} ${fmt(r.ing)}</td>
           <td class="num" style="color:var(--muted);font-weight:500">${r.moneda==='ARS'?'= u$s '+fmt(r.ingU):''}</td>
         </tr>`).join('')}</tbody></table>
-        ${xInact.length?`<div class="debNota">Además quedaron afuera del total u$s ${fmt(inactU)}
-           en ${xInact.length} ${xInact.length===1?'fila':'filas'} de departamentos marcados como inactivos.</div>`:''}
       </div>
     </div>`;
 
@@ -1523,9 +1519,9 @@ function renderIng(){
         ${sinCargar.length?`<div class="aviTit">Se alojó gente pero no hay ningún ingreso cargado (${sinCargar.length})</div>
           ${sinCargar.map(x=>`<div class="aviLin">• <b>${x.dep}</b> — ${x.dias} ${x.dias===1?'día ocupado':'días ocupados'} en ${x.cuando}
             <span>· el calendario dice que hubo huéspedes y en el Excel no figura ninguna reserva</span></div>`).join('')}`:''}
-        ${inactL.length?`<div class="aviTit">Marcados como inactivos pero tuvieron ingresos (${inactL.length})</div>
-          ${inactL.map(([d,x])=>`<div class="aviLin">• <b>${d}</b> — u$s ${fmt(x.u)} en ${x.n} ${x.n===1?'reserva':'reservas'}
-            <span>· esta plata no está sumada en el total</span></div>`).join('')}`:''}
+        ${inactL.length?`<div class="aviTit info">Facturaron pero figuran como inactivos (${inactL.length})</div>
+          ${inactL.map(([d,x])=>`<div class="aviLin info">• <b>${d}</b> — u$s ${fmt(x.u)} en ${x.n} ${x.n===1?'reserva':'reservas'}
+            <span>· la plata está sumada en el total. Si el depto sigue en alquiler, hay que ponerlo Activo en el Excel</span></div>`).join('')}`:''}
         ${sinCal.length?`<div class="aviTit info">Fuera de alquiler este mes (${sinCal.length})</div>
           <div class="aviLin info">${sinCal.join(' · ')}</div>
           <div class="aviLin info" style="padding-top:2px"><span>No figuran en el calendario del período: ese mes no estaban en alquiler.
