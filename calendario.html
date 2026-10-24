@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Calendario Rent2888</title>
+<meta name="theme-color" content="#CC1414">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calendario">
+<link rel="apple-touch-icon" href="icon192.png">
+<link rel="icon" href="icon192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --bg:#F5F3F2; --card:#FFFFFF; --ink:#16130F; --soft:#6F6660; --line:#E6E0DC;
+  --rojo:#CC1414; --verde:#15803D; --ambar:#B45309; --gris:#8A817B; --oro:#A16207;
+  --vBg:#DCFCE7; --aBg:#FEF3C7; --rBg:#FEE2E2; --gBg:#EFECEA; --oBg:#FEF9C3;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121110; --card:#1C1A19; --ink:#F2EEEB; --soft:#9A918B; --line:#2E2A28;
+    --rojo:#FF5A4D; --verde:#4ADE80; --ambar:#FBBF24; --gris:#9A918B; --oro:#FACC15;
+    --vBg:#13331F; --aBg:#38260A; --rBg:#3A1512; --gBg:#242120; --oBg:#332B08;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
+  font-size:16px; line-height:1.4; -webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+/* ---------- login ---------- */
+#login{position:fixed;inset:0;background:var(--bg);z-index:99;display:flex;
+  align-items:center;justify-content:center;padding:24px}
+#login .box{width:100%;max-width:320px;text-align:center}
+#login h1{font-size:30px;font-weight:800;letter-spacing:-.5px;margin:0 0 4px}
+#login h1 span{color:var(--rojo)}
+#login p{color:var(--soft);font-size:14px;margin:0 0 24px}
+#login input{width:100%;padding:15px;font-size:17px;border-radius:12px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:center}
+#login button{width:100%;margin-top:12px;padding:15px;font-size:16px;font-weight:700;
+  border:0;border-radius:12px;background:var(--rojo);color:#fff;font-family:inherit}
+#loginErr{display:none;color:var(--rojo);font-size:13px;margin-top:12px}
+/* ---------- cabecera ---------- */
+header{position:sticky;top:0;z-index:20;background:var(--card);
+  border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.hTop{display:flex;align-items:center;gap:10px;padding:9px 14px 6px}
+.marca{font-size:17px;font-weight:800;letter-spacing:-.3px;flex:1}
+.marca span{color:var(--rojo)}
+.icoBtn{background:none;border:0;color:var(--soft);font-size:19px;padding:6px 8px;
+  font-family:inherit;cursor:pointer;line-height:1}
+.mes{display:flex;align-items:center;justify-content:center;gap:4px;padding:0 10px 7px}
+.mes select{flex:1;max-width:230px;text-align:center;text-align-last:center;
+  background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:10px;
+  padding:9px;font-family:inherit;font-size:15px;font-weight:700}
+.mes button{background:var(--bg);border:1px solid var(--line);color:var(--ink);
+  border-radius:10px;width:42px;height:38px;font-size:17px;font-family:inherit;cursor:pointer}
+.vistas{display:flex;gap:0;padding:0 10px 10px}
+.vistas button{flex:1;padding:9px 4px;font-size:14px;font-weight:600;font-family:inherit;
+  background:var(--bg);border:1px solid var(--line);color:var(--soft);cursor:pointer}
+.vistas button:first-child{border-radius:10px 0 0 10px}
+.vistas button:last-child{border-radius:0 10px 10px 0}
+.vistas button+button{border-left:0}
+.vistas button.on{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.buscar{padding:0 10px 9px}
+.buscar input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);font-family:inherit;font-size:15px}
+/* ---------- contenido ---------- */
+main{padding:12px 10px 40px}
+#estado{text-align:center;color:var(--soft);padding:50px 20px;font-size:15px}
+.fecha{display:flex;align-items:center;gap:8px;margin:2px 0 12px}
+.fecha .d{flex:1;font-size:19px;font-weight:800;letter-spacing:-.3px}
+.fecha button{background:var(--card);border:1px solid var(--line);color:var(--ink);
+  border-radius:10px;width:40px;height:36px;font-size:16px;font-family:inherit;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chip{font-size:12.5px;font-weight:700;padding:5px 10px;border-radius:20px;white-space:nowrap}
+.chip.v{background:var(--vBg);color:var(--verde)}
+.chip.a{background:var(--aBg);color:var(--ambar)}
+.chip.r{background:var(--rBg);color:var(--rojo)}
+.chip.g{background:var(--gBg);color:var(--gris)}
+.chip.o{background:var(--oBg);color:var(--oro)}
+.grupo{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  margin-bottom:12px;overflow:hidden}
+.grupo h2{font-size:11.5px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;
+  margin:0;padding:12px 14px 10px;color:var(--soft);display:flex;gap:8px;align-items:center}
+.grupo h2 b{margin-left:auto;font-size:13px;color:var(--ink)}
+.grupo h2::before{content:'';width:9px;height:9px;border-radius:50%;background:var(--gris);flex:0 0 9px}
+.grupo.v h2::before{background:var(--verde)} .grupo.a h2::before{background:var(--ambar)}
+.grupo.r h2::before{background:var(--rojo)}  .grupo.o h2::before{background:var(--oro)}
+.fila{display:flex;align-items:center;gap:11px;padding:11px 14px;border-top:1px solid var(--line)}
+.cod{font-weight:800;font-size:13px;min-width:62px;flex:0 0 62px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+.nom{flex:1;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.nom small{display:block;color:var(--soft);font-size:12.5px;margin-top:1px}
+.libres{padding:11px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px}
+.libres span{font-size:12.5px;font-weight:700;background:var(--bg);border:1px solid var(--line);
+  padding:4px 9px;border-radius:8px}
+.vacio{padding:26px 14px;text-align:center;color:var(--soft);font-size:14px}
+/* ---------- grilla semana / mes ----------
+   Va con CSS grid y no con <table>: con 31 columnas la tabla se desarmaba
+   (el encabezado se metía entre las filas). Con grid el pegado de la primera
+   columna y del encabezado es predecible. */
+.gWrap{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  overflow:auto;-webkit-overflow-scrolling:touch;max-height:70vh;position:relative}
+.gr{display:grid;width:max-content;font-size:11px}
+.gr .gh{position:sticky;top:0;z-index:3;background:var(--card);
+  border-bottom:1px solid var(--line);padding:6px 2px 5px;font-size:10px;font-weight:700;
+  color:var(--soft);text-align:center;line-height:1.15}
+.gr .gh.hoy{color:var(--rojo)}
+.gr .cab{position:sticky;left:0;background:var(--card);text-align:left;
+  padding-left:10px;border-right:1px solid var(--line);white-space:nowrap}
+.gr .gh.cab{z-index:5;display:flex;align-items:flex-end}
+.gr .gc{border-bottom:1px solid var(--line);height:36px;display:flex;
+  align-items:center;justify-content:center;font-size:9.5px;font-weight:700;
+  overflow:hidden;padding:0 1px;border-left:1px solid var(--line)}
+.gr .gc.cab{z-index:2;justify-content:flex-start;font-weight:800;font-size:11.5px;
+  border-left:0;padding-right:6px}
+.gr .gc span{overflow:hidden;white-space:nowrap;text-overflow:clip}
+.gr.mes .gc{font-size:12px}
+.gc.ocu{background:var(--rBg);color:var(--rojo)}
+.gc.blo{background:var(--gBg);color:var(--gris)}
+.gc.pro{background:var(--oBg);color:var(--oro)}
+.gc.hoyCol{box-shadow:inset 0 0 0 2px var(--rojo)}
+.leyenda{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;padding:0 4px;
+  font-size:12px;color:var(--soft)}
+.leyenda i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;
+  vertical-align:-1px}
+.pie{margin-top:16px;text-align:center;color:var(--soft);font-size:11.5px;line-height:1.6}
+.aviso{background:var(--aBg);color:var(--ambar);border-radius:12px;padding:11px 14px;
+  font-size:13.5px;margin-bottom:12px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>RENT<span>2888</span></h1>
+    <p>Calendario</p>
+    <input type="password" id="pw" inputmode="text" placeholder="Contraseña"
+           onkeydown="if(event.key==='Enter')entrar()">
+    <button onclick="entrar()">Entrar</button>
+    <div id="loginErr">Contraseña incorrecta</div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header>
+  <div class="hTop">
+    <div class="marca">RENT<span>2888</span></div>
+    <span id="sello" style="font-size:11px;color:var(--soft)"></span>
+    <button class="icoBtn" onclick="cargar(true)" title="Actualizar">&#x21bb;</button>
+  </div>
+  <div class="mes">
+    <button onclick="moverMes(-1)">&#8249;</button>
+    <select id="selMes" onchange="cambiarMes()"></select>
+    <button onclick="moverMes(1)">&#8250;</button>
+  </div>
+  <div class="vistas">
+    <button data-v="hoy"    onclick="setVista('hoy')">Hoy</button>
+    <button data-v="dia"    onclick="setVista('dia')">Día</button>
+    <button data-v="semana" onclick="setVista('semana')">Semana</button>
+    <button data-v="mes"    onclick="setVista('mes')">Mes</button>
+  </div>
+  <div class="buscar"><input id="q" placeholder="Buscar depto o huésped" oninput="pintar()"></div>
+</header>
+
+<main>
+  <div id="estado">Cargando el calendario…</div>
+  <div id="cuerpo"></div>
+</main>
+</div>
+
+<script>
+/* =======================================================================
+   CALENDARIO RENT2888 — app para el celular
+   Lee el mismo Excel de calendario que usa el tablero. Una solapa por mes,
+   en mayúsculas y sin acento (OCTUBRE, NOVIEMBRE...). La grilla es:
+     fila 1 -> nombres de día de la semana
+     fila 2 -> col A "Dptos: N" y después los números de día
+     fila 3+ -> un departamento por fila; col A tiene "-CODIGO" y después
+                una celda por día que repite ese código.
+   Una celda con sólo el código = día libre. Si trae algo más, puede ser el
+   nombre del huésped (entre puntos, pero escrito de mil formas distintas),
+   BLOQUEADO, el propietario usándolo, tareas en mayúsculas, y las marcas
+   (in hs) / (out hs) que indican el día de entrada y el de salida.
+   ======================================================================= */
+
+const CAL_ID = '1jkwUJQNaAhqYjn6OQCXrp9eq775t9mY86dXtQcGFZgg';
+const PASS   = 'rent2888';
+const MESES  = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const MESES_T= ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio',
+                'Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DIAS_T = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const ANO    = 2026;          // el libro de calendario es todo de 2026
+
+let DATA = null;              // {mes, dias:[n], deptos:[{cod, celdas:{dia:obj}}]}
+let vista = 'hoy';
+let mesSel = new Date().getMonth();      // 0-11
+let diaSel = new Date().getDate();
+let cargando = false;
+
+/* ---------------- login ---------------- */
+function entrar(){
+  const v = document.getElementById('pw').value.trim().toLowerCase();
+  if(v !== PASS){ document.getElementById('loginErr').style.display='block'; return; }
+  try{ localStorage.setItem('r28cal_ok','1'); }catch(e){}
+  abrir();
+}
+function abrir(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  armarSelMes();
+  cargar();
+}
+try{ if(localStorage.getItem('r28cal_ok')==='1') setTimeout(abrir,0); }catch(e){}
+
+/* ---------------- lectura del Excel ---------------- */
+function parseCSV(txt){
+  const filas=[]; let f=[], c='', q=false;
+  for(let i=0;i<txt.length;i++){
+    const ch=txt[i];
+    if(q){ if(ch==='"'){ if(txt[i+1]==='"'){c+='"';i++;} else q=false; } else c+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch===','){ f.push(c); c=''; }
+    else if(ch==='\n'){ f.push(c); filas.push(f); f=[]; c=''; }
+    else if(ch!=='\r') c+=ch;
+  }
+  if(c||f.length){ f.push(c); filas.push(f); }
+  return filas;
+}
+
+/* --- tareas que aparecen escritas en las celdas, de más larga a más corta --- */
+const TAREAS = [
+  /CAMBIO\s+DE\s+BLANCOS/ig, /SABANAS?\s+SILLON/ig, /SIN\s+TOALLAS/ig,
+  /CON\s+BLANCOS/ig, /LIMPIEZA\s+PROFUNDA/ig, /VISITA\s*\d{1,2}\s*HS/ig,
+  /FUMIGAC\w*/ig, /ACOLCHADO/ig, /LIMPIEZA/ig, /BLANCOS/ig, /TOALLAS?/ig,
+  /SABANAS?/ig, /REPAS\w*/ig, /PROFUNDA/ig, /SUCIO/ig, /\b\d{1,2}\s*PAX\b/ig
+];
+const RX_MARCA = /\(\s*(in|out)\s*hs\s*\)/ig;
+
+/* Lee una celda y devuelve qué pasa ese día en ese departamento. */
+function leerCelda(txt, cod){
+  const out = {libre:true, bloq:false, prop:false, tareas:[], pax:'', entra:null, sale:null, queda:null};
+  let t = String(txt==null?'':txt).replace(/ /g,' ').trim();
+  const c = cod.trim();
+  if(t.toUpperCase().indexOf(c.toUpperCase())===0) t = t.slice(c.length);
+  t = t.trim();
+  if(!t) return out;
+
+  // 1) bloqueado (aguanta BLOQUEADO, BLOQUI, BLOQ y demás variantes mal escritas)
+  if(/bloq/i.test(t)){ out.bloq = true; t = t.replace(/\.?\s*bloq\w*\s*\.?/ig,' '); }
+
+  // 2) la cantidad de pax no es una tarea: es un dato de la reserva
+  t = t.replace(/\b(\d{1,2})\s*PAX\b/ig, (m,n)=>{ out.pax = n+' pax'; return ' '; });
+
+  // 3) tareas: se sacan del texto para que no se confundan con el nombre
+  TAREAS.forEach(rx=>{
+    rx.lastIndex = 0;
+    t = t.replace(rx, m=>{ out.tareas.push(m.replace(/\s+/g,' ').trim().toUpperCase()); return ' '; });
+  });
+
+  // 4) lo que queda son nombres, partidos por las marcas (in hs) / (out hs).
+  //    Un día de recambio trae las dos cosas en la misma celda: primero el que
+  //    se va y después el que entra.
+  const limpio = s => String(s||'').replace(/[.·]+/g,' ').replace(/\s+/g,' ').trim();
+  RX_MARCA.lastIndex = 0;
+  const partes = t.split(RX_MARCA);
+  if(partes.length === 1){
+    const n = limpio(t);
+    if(n) out.queda = n;
+  } else {
+    for(let i=0;i<partes.length-1;i+=2){
+      const n = limpio(partes[i]), tipo = String(partes[i+1]||'').toLowerCase();
+      if(!n) continue;
+      if(tipo === 'out') out.sale = n; else out.entra = n;
+    }
+    const cola = limpio(partes[partes.length-1]);
+    if(cola && !out.entra && !out.sale) out.queda = cola;
+  }
+
+  // 5) el propietario se escribe igual que un huésped: hay que mirar la palabra
+  const todos = [out.entra, out.sale, out.queda].filter(Boolean).join(' ');
+  if(/propietari/i.test(todos)) out.prop = true;
+
+  // Una celda que sólo trae una tarea (por ejemplo "-1A . BLANCOS") NO está
+  // ocupada: el depto está libre y hay algo para hacer ahí.
+  out.libre = !out.entra && !out.sale && !out.queda && !out.bloq;
+  return out;
+}
+
+async function cargar(forzar){
+  if(cargando) return;
+  cargando = true;
+  const est = document.getElementById('estado');
+  if(!DATA || DATA.mes !== mesSel){ est.style.display='block'; est.textContent='Cargando el calendario…'; }
+  try{
+    const hoja = MESES[mesSel];
+    const url = 'https://docs.google.com/spreadsheets/d/'+CAL_ID+
+                '/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(hoja)+'&t='+Date.now();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('RED');
+    const texto = await r.text();
+    if(/^\s*</.test(texto)) throw new Error('SOLAPA');   // gviz devuelve HTML si la solapa no existe
+    DATA = armar(parseCSV(texto), mesSel);
+    guardarCache(mesSel, DATA);
+    est.style.display='none';
+    sello('Actualizado ' + new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}));
+  }catch(e){
+    const cache = leerCache(mesSel);
+    const motivo = String(e && e.message || '');
+    if(cache && motivo === 'RED'){
+      DATA = cache; est.style.display='none'; sello('Sin señal · datos guardados');
+    } else {
+      est.style.display='block';
+      est.textContent =
+        motivo === 'SOLAPA' ? 'No encontré la solapa ' + MESES[mesSel] + ' en el Excel del calendario.'
+      : motivo === 'VACIA'  ? 'La solapa ' + MESES[mesSel] + ' está vacía: todavía no se cargó ese mes.'
+      : 'No pude leer el calendario. Fijate que tengas internet y volvé a probar.';
+      DATA = null;
+    }
+  }
+  cargando = false;
+  pintar();
+}
+
+/* Arma la grilla: busca la fila de los números de día y después cada departamento. */
+function armar(raw, mes){
+  let iDias = -1, cols = [];
+  for(let i=0;i<Math.min(6,raw.length);i++){
+    const c = [];
+    raw[i].forEach((v,j)=>{ const n=parseInt(String(v).trim(),10);
+      if(String(v).trim()!=='' && n>=1 && n<=31 && String(n)===String(v).trim()) c.push({dia:n,col:j}); });
+    if(c.length >= 20){ iDias = i; cols = c; break; }
+  }
+  if(iDias < 0) throw new Error('VACIA');
+  const semana = raw[iDias-1] || [];
+  const deptos = [];
+  for(let i=iDias+1;i<raw.length;i++){
+    const cod = String(raw[i][0]==null?'':raw[i][0]).trim();
+    if(!cod || !/^-/.test(cod)) continue;
+    const celdas = {};
+    cols.forEach(c=>{ celdas[c.dia] = leerCelda(raw[i][c.col], cod); });
+    deptos.push({cod: cod.replace(/^-/,''), raw: cod, celdas});
+  }
+  return {mes, dias: cols.map(c=>c.dia), semana: cols.map(c=>String(semana[c.col]||'').trim()), deptos};
+}
+
+function guardarCache(mes, d){ try{ localStorage.setItem('r28cal_'+mes, JSON.stringify(d)); }catch(e){} }
+function leerCache(mes){ try{ const s=localStorage.getItem('r28cal_'+mes); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function sello(t){ document.getElementById('sello').textContent = t; }
+
+/* ---------------- navegación ---------------- */
+function armarSelMes(){
+  const s = document.getElementById('selMes');
+  s.innerHTML = MESES_T.map((m,i)=>'<option value="'+i+'">'+m+' '+ANO+'</option>').join('');
+  s.value = mesSel;
+}
+function cambiarMes(){
+  mesSel = +document.getElementById('selMes').value;
+  const hoy = new Date();
+  diaSel = (mesSel === hoy.getMonth() && hoy.getFullYear() === ANO) ? hoy.getDate() : 1;
+  if(vista === 'hoy') vista = 'dia';
+  marcarVista();
+  cargar();
+}
+function moverMes(p){
+  const n = mesSel + p;
+  if(n < 0 || n > 11) return;
+  document.getElementById('selMes').value = n;
+  cambiarMes();
+}
+function setVista(v){
+  vista = v;
+  if(v === 'hoy'){
+    const hoy = new Date();
+    mesSel = hoy.getMonth(); diaSel = hoy.getDate();
+    document.getElementById('selMes').value = mesSel;
+    marcarVista();
+    if(!DATA || DATA.mes !== mesSel){ cargar(); return; }
+  }
+  marcarVista(); pintar();
+}
+function marcarVista(){
+  document.querySelectorAll('.vistas button').forEach(b=>b.classList.toggle('on', b.dataset.v===vista));
+}
+function moverDia(p){
+  const max = DATA ? Math.max.apply(null, DATA.dias) : 31;
+  const n = diaSel + p;
+  if(n < 1 || n > max) return;
+  diaSel = n;
+  if(vista === 'hoy') { vista = 'dia'; marcarVista(); }
+  pintar();
+}
+const esHoy = (m,d) => { const h=new Date(); return h.getFullYear()===ANO && h.getMonth()===m && h.getDate()===d; };
+
+/* ---------------- pintar ---------------- */
+function pintar(){
+  if(!DATA){ document.getElementById('cuerpo').innerHTML=''; return; }
+  marcarVista();
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const c = document.getElementById('cuerpo');
+  if(vista === 'hoy' || vista === 'dia') c.innerHTML = vistaDia(q);
+  else if(vista === 'semana') c.innerHTML = vistaGrilla(q, true);
+  else c.innerHTML = vistaGrilla(q, false);
+}
+
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+function coincide(dep, cel, q){
+  if(!q) return true;
+  if(dep.cod.toLowerCase().indexOf(q) >= 0) return true;
+  const n = [cel && cel.entra, cel && cel.sale, cel && cel.queda].filter(Boolean).join(' ').toLowerCase();
+  return n.indexOf(q) >= 0;
+}
+
+function vistaDia(q){
+  const d = diaSel;
+  const f = new Date(ANO, mesSel, d);
+  const titulo = DIAS_T[f.getDay()] + ' ' + d + ' de ' + MESES_T[mesSel].toLowerCase();
+  const entran=[], salen=[], ocupados=[], libres=[], bloqueados=[], propios=[], tareas=[];
+
+  DATA.deptos.forEach(dep=>{
+    const cel = dep.celdas[d];
+    if(!cel || !coincide(dep, cel, q)) return;
+    if(cel.tareas.length) tareas.push({cod:dep.cod, t:cel.tareas.join(' · ')});
+    // El propietario usándolo NO es un huésped: va en su propio grupo y no
+    // cuenta como entrada ni como salida.
+    if(cel.prop){
+      const m = cel.entra ? ' (entra hoy)' : cel.sale ? ' (se va hoy)' : '';
+      propios.push({cod:dep.cod, n:(cel.entra||cel.queda||cel.sale)+m});
+      return;
+    }
+    if(cel.sale)  salen.push({cod:dep.cod, n:cel.sale + (cel.pax?' · '+cel.pax:'')});
+    if(cel.entra) entran.push({cod:dep.cod, n:cel.entra + (cel.pax?' · '+cel.pax:'')});
+    if(cel.bloq){ bloqueados.push(dep.cod); return; }
+    if(cel.libre){ libres.push(dep.cod); return; }
+    if(cel.queda && !cel.entra && !cel.sale) ocupados.push({cod:dep.cod, n:cel.queda});
+  });
+
+  let h = '<div class="fecha"><button onclick="moverDia(-1)">&#8249;</button>' +
+          '<div class="d">'+esc(titulo)+(esHoy(mesSel,d)?' · hoy':'')+'</div>' +
+          '<button onclick="moverDia(1)">&#8250;</button></div>';
+
+  const conGente = ocupados.length + entran.length + (salen.filter(s=>!entran.some(e=>e.cod===s.cod)).length);
+  h += '<div class="chips">' +
+    chip('v', entran.length + ' entran') + chip('a', salen.length + ' salen') +
+    chip('r', conGente + ' con gente') +
+    (propios.length ? chip('o', propios.length + ' propietario') : '') +
+    chip('g', libres.length + ' libres') +
+    (bloqueados.length ? chip('g', bloqueados.length + ' bloqueados') : '') +
+    '</div>';
+
+  h += bloque('v','Entran hoy', entran);
+  h += bloque('a','Salen hoy', salen);
+  h += bloque('', 'Tareas del día', tareas.map(t=>({cod:t.cod, n:t.t})));
+  h += bloque('r','Siguen alojados', ocupados);
+  h += bloque('o','Los usa el propietario', propios);
+  h += lista('Libres', libres);
+  h += lista('Bloqueados', bloqueados);
+
+  if(!entran.length && !salen.length && !ocupados.length && !libres.length &&
+     !bloqueados.length && !propios.length && !tareas.length)
+    h += '<div class="grupo"><div class="vacio">'+(q?'Nada que coincida con la búsqueda.':'No hay nada cargado para este día.')+'</div></div>';
+
+  h += '<div class="pie">Sale del Excel del calendario, solapa '+esc(MESES[mesSel])+'.<br>Se actualiza solo cada vez que abrís la app.</div>';
+  return h;
+}
+const chip = (c,t) => '<span class="chip '+c+'">'+esc(t)+'</span>';
+
+function bloque(cls, titulo, filas){
+  if(!filas.length) return '';
+  return '<div class="grupo '+cls+'"><h2>'+esc(titulo)+'<b>'+filas.length+'</b></h2>' +
+    filas.map(f=>'<div class="fila"><div class="cod">'+esc(f.cod)+'</div><div class="nom">'+esc(f.n)+'</div></div>').join('') +
+    '</div>';
+}
+function lista(titulo, cods){
+  if(!cods.length) return '';
+  return '<div class="grupo"><h2>'+esc(titulo)+'<b>'+cods.length+'</b></h2>' +
+    '<div class="libres">'+cods.map(c=>'<span>'+esc(c)+'</span>').join('')+'</div></div>';
+}
+
+/* Grilla de semana (7 días alrededor del elegido) o del mes entero. */
+function vistaGrilla(q, semana){
+  let dias = DATA.dias.slice();
+  if(semana){
+    const i = Math.max(0, dias.indexOf(diaSel));
+    const ini = Math.min(Math.max(0, i - 3), Math.max(0, dias.length - 7));
+    dias = dias.slice(ini, ini + 7);
+  }
+  const deptos = DATA.deptos.filter(dep => !q || dias.some(d => coincide(dep, dep.celdas[d], q)));
+
+  let h = '';
+  if(semana){
+    h += '<div class="fecha"><button onclick="moverDia(-7)">&#8249;</button>' +
+         '<div class="d">'+dias[0]+' al '+dias[dias.length-1]+' de '+MESES_T[mesSel].toLowerCase()+'</div>' +
+         '<button onclick="moverDia(7)">&#8250;</button></div>';
+  }
+  // en la semana las 7 columnas tienen que entrar enteras en la pantalla del celular
+  const anchoCol = semana ? 44 : 30, anchoCab = semana ? 58 : 64;
+  h += '<div class="gWrap"><div class="gr'+(semana?'':' mes')+'" style="grid-template-columns:'+anchoCab+'px repeat('+dias.length+','+anchoCol+'px)">';
+  h += '<div class="gh cab">Depto</div>' + dias.map(d=>{
+    const f = new Date(ANO, mesSel, d);
+    return '<div class="gh '+(esHoy(mesSel,d)?'hoy':'')+'">'+DIAS_T[f.getDay()].slice(0,2)+'<br>'+d+'</div>';
+  }).join('');
+
+  deptos.forEach(dep=>{
+    h += '<div class="gc cab">'+esc(dep.cod)+'</div>' + dias.map(d=>{
+      const c = dep.celdas[d] || {libre:true, tareas:[]};
+      let cls = '', txt = '';
+      if(c.bloq){ cls='blo'; txt = semana ? 'BLOQ' : '&#215;'; }
+      else if(c.prop){ cls='pro'; txt = semana ? 'Prop' : 'P'; }
+      else if(!c.libre){
+        cls = 'ocu';
+        const n = c.entra || c.queda || c.sale || '';
+        // en la semana entra el nombre; en el mes son 31 columnas y sólo caben las flechas
+        if(c.sale && c.entra) txt = '&#8646;';
+        else if(c.entra) txt = semana ? '&#9656;'+corto(n,6) : '&#9656;';
+        else if(c.sale)  txt = semana ? corto(n,6)+'&#9666;' : '&#9666;';
+        else txt = semana ? corto(n,7) : '&#9679;';
+      } else if(c.tareas.length){ txt = '&#183;'; }
+      return '<div class="gc '+cls+(esHoy(mesSel,d)?' hoyCol':'')+'" title="'+esc(detalle(c))+'"><span>'+txt+'</span></div>';
+    }).join('');
+  });
+  h += '</div></div>';
+  h += '<div class="leyenda">' +
+    '<span><i style="background:var(--rBg);border:1px solid var(--rojo)"></i>Con gente</span>' +
+    '<span><i style="background:var(--oBg);border:1px solid var(--oro)"></i>Propietario</span>' +
+    '<span><i style="background:var(--gBg);border:1px solid var(--gris)"></i>Bloqueado</span>' +
+    '<span><i style="border:1px solid var(--line)"></i>Libre</span>' +
+    '<span>&#9656; entra · &#9666; sale · &#8646; recambio</span></div>';
+  if(!deptos.length) h += '<div class="grupo"><div class="vacio">Nada que coincida con la búsqueda.</div></div>';
+  return h;
+}
+function corto(n, max){
+  const s = String(n||'').trim();
+  if(!s) return '';
+  const p = s.split(/\s+/)[0];
+  return p.length > (max||7) ? p.slice(0,(max||7)) : p;
+}
+function detalle(c){
+  if(c.bloq) return 'Bloqueado';
+  if(c.libre) return 'Libre';
+  const p = [];
+  if(c.sale) p.push('Sale: '+c.sale);
+  if(c.entra) p.push('Entra: '+c.entra);
+  if(c.queda) p.push(c.queda);
+  if(c.tareas.length) p.push(c.tareas.join(' · '));
+  return p.join(' | ');
+}
+
+marcarVista();
+
+/* Si dejan la app abierta y vuelven más tarde, que se actualice sola. Así nadie
+   mira la reserva de ayer creyendo que es la de hoy. */
+let ultima = Date.now();
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState !== 'visible') return;
+  if(document.getElementById('app').style.display === 'none') return;
+  const hoy = new Date();
+  if(vista === 'hoy' && (hoy.getDate() !== diaSel || hoy.getMonth() !== mesSel)){
+    mesSel = hoy.getMonth(); diaSel = hoy.getDate();
+    document.getElementById('selMes').value = mesSel;
+  }
+  if(Date.now() - ultima > 120000){ ultima = Date.now(); cargar(); } else pintar();
+});
+</script>
+</body>
+</html>
