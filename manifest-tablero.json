@@ -1,0 +1,16 @@
+{
+  "name": "Rent2888",
+  "short_name": "Rent2888",
+  "description": "Panel de control de Rent2888.",
+  "start_url": "index.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0e13",
+  "theme_color": "#C11625",
+  "icons": [
+    { "src": "icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

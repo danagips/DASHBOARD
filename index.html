@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#C11625">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rent2888">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon192.png">
+<link rel="manifest" href="manifest-tablero.json">
 <title>Rent2888 · Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -25,6 +33,22 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter',system-ui,sans-se
 #login button{width:100%;margin-top:14px;padding:12px;border:none;border-radius:10px;background:var(--red);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
 #login button:hover{background:var(--red-dark)}
 #loginErr{color:var(--neg);font-size:12px;margin-top:10px;display:none}
+/* ---------- entrar con la cara ---------- */
+#login #btnFace{display:none;align-items:center;justify-content:center;gap:9px;width:100%;
+  margin:0;padding:13px;border:none;border-radius:12px;
+  background:var(--red);color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+#login #btnFace:hover{background:var(--red-dark)}
+#login #btnFace:disabled{opacity:.5;cursor:default}
+#login #btnFace svg{width:22px;height:22px;flex:none}
+#faceSep{display:none;align-items:center;gap:10px;margin:14px 0 2px;color:var(--muted);font-size:12px}
+#faceSep::before,#faceSep::after{content:'';flex:1;height:1px;background:var(--border)}
+#faceAsk{display:none;margin-top:16px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel2);text-align:left}
+#faceAsk p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--txt)}
+#faceAsk .fila{display:flex;gap:8px}
+#login #faceAsk button{flex:1;width:auto;margin:0;padding:11px;font-size:14px;border-radius:10px;cursor:pointer}
+#login #faceAsk .si{background:var(--red);color:#fff;border:none;font-weight:700}
+#login #faceAsk .no{background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:600}
+
 /* ---------- LAYOUT ---------- */
 #app{display:none}
 header{position:sticky;top:0;z-index:50;background:rgba(12,14,19,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:center;gap:14px;height:60px}
@@ -212,9 +236,19 @@ tr.grp td .gn{color:var(--muted);font-weight:600;font-size:12px}
   <div class="box">
     <h1>RENT<span>2888</span></h1>
     <p>Panel financiero — acceso restringido</p>
+  <button id="btnFace" onclick="faceEntrar()" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 10v1.2"/><path d="M15 10v1.2"/><path d="M12 9.6v3.9a.5.5 0 0 1-.5.5H11"/><path d="M9 16.2s1.2 1 3 1 3-1 3-1"/></svg><span>Entrar con Face ID</span></button>
+  <div id="faceSep"><span>o con la clave</span></div>
     <input type="password" id="pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
     <button onclick="doLogin()">Entrar</button>
     <div id="loginErr">Contraseña incorrecta</div>
+  <div id="faceAsk">
+    <p>¿Querés entrar con la cara la próxima vez, sin tipear la clave?</p>
+    <div class="fila">
+      <button class="si" onclick="faceActivar()" type="button">Sí, activar</button>
+      <button class="no" onclick="faceNoGracias()" type="button">Ahora no</button>
+    </div>
+  </div>
+
   </div>
 </div>
 
@@ -424,9 +458,80 @@ const cfg = {
 /* ================= LOGIN ================= */
 function doLogin(){
   if(document.getElementById('pw').value === cfg.pass){
-    sessionStorage.setItem('r28_auth','1'); showApp();
+    faceOfrecer();
   } else { document.getElementById('loginErr').style.display='block'; }
 }
+function entrarYa(){ sessionStorage.setItem('r28_auth','1'); showApp(); }
+
+/* ================= ENTRAR CON LA CARA (Face ID / huella) =================
+   Esto es para NO TIPEAR la clave. No cambia la seguridad: la clave sigue
+   siendo la misma y sigue funcionando. Vale sólo en este teléfono. */
+const FACE_KEY = 'r28_face_cred';
+const FACE_NO  = 'r28_face_no';
+const _b64e = b => btoa(String.fromCharCode.apply(null, new Uint8Array(b)));
+const _b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function faceGuardada(){ try{ return localStorage.getItem(FACE_KEY); }catch(e){ return null; } }
+async function faceDisponible(){
+  try{
+    if(!window.PublicKeyCredential || !window.isSecureContext) return false;
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  }catch(e){ return false; }
+}
+async function faceInit(){
+  if(faceGuardada() && await faceDisponible()){
+    var b = document.getElementById('btnFace'); if(b) b.style.display = 'flex';
+    var sp = document.getElementById('faceSep'); if(sp) sp.style.display = 'flex';
+  }
+}
+async function faceOfrecer(){
+  try{
+    if(!faceGuardada() && !localStorage.getItem(FACE_NO) && await faceDisponible()){
+      document.getElementById('faceAsk').style.display = 'block';
+      return;
+    }
+  }catch(e){}
+  entrarYa();
+}
+function faceNoGracias(){
+  try{ localStorage.setItem(FACE_NO,'1'); }catch(e){}
+  document.getElementById('faceAsk').style.display='none';
+  entrarYa();
+}
+async function faceActivar(){
+  try{
+    const cred = await navigator.credentials.create({ publicKey:{
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name:'Rent2888' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)),
+              name:'rent2888', displayName:'Rent2888' },
+      pubKeyCredParams: [{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{ authenticatorAttachment:'platform',
+                               userVerification:'required', residentKey:'preferred' },
+      timeout: 60000, attestation:'none'
+    }});
+    try{ localStorage.setItem(FACE_KEY, _b64e(cred.rawId)); }catch(e){}
+  }catch(e){ /* si lo cancela, entra igual */ }
+  document.getElementById('faceAsk').style.display='none';
+  entrarYa();
+}
+async function faceEntrar(){
+  const id = faceGuardada(); if(!id) return;
+  const btn = document.getElementById('btnFace'); btn.disabled = true;
+  try{
+    await navigator.credentials.get({ publicKey:{
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type:'public-key', id:_b64d(id) }],
+      userVerification:'required', timeout:60000
+    }});
+    entrarYa();
+  }catch(e){
+    btn.disabled = false;
+    const err = document.getElementById('loginErr');
+    err.textContent = 'No se pudo con la cara. Poné la clave.';
+    err.style.display = 'block';
+  }
+}
+
 function showApp(){
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
@@ -447,7 +552,7 @@ function startAutoRefresh(){
   });
 }
 if(sessionStorage.getItem('r28_auth')==='1'){ window.addEventListener('DOMContentLoaded',showApp); }
-else { window.addEventListener('DOMContentLoaded',()=>document.getElementById('pw').focus()); }
+else { window.addEventListener('DOMContentLoaded',()=>{ document.getElementById('pw').focus(); faceInit(); }); }
 
 /* ================= HELPERS ================= */
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
